@@ -1,0 +1,96 @@
+import uuid
+from datetime import date, datetime, timezone
+
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, event
+from app.db.types import GUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.shared.enums import DealStatus, PaymentStatus, ServiceType
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Deal(Base):
+    __tablename__ = "deals"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    number: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("leads.id", ondelete="SET NULL"), nullable=True
+    )
+    assigned_to: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    service_type: Mapped[str] = mapped_column(String(50), default=ServiceType.RAFTING, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default=DealStatus.NEW, nullable=False, index=True)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    guests_count: Mapped[int] = mapped_column(Integer, default=1)
+    total_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0, nullable=False)
+    paid_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0, nullable=False)
+    payment_status: Mapped[str] = mapped_column(
+        String(30), default=PaymentStatus.UNPAID, nullable=False, index=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    items: Mapped[list["DealItem"]] = relationship(
+        "DealItem", back_populates="deal", cascade="all, delete-orphan"
+    )
+    bookings: Mapped[list["Booking"]] = relationship("Booking", back_populates="deal")
+    payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="deal")
+    client: Mapped["Client"] = relationship("Client", back_populates="deals")
+
+    @property
+    def debt_amount(self) -> float:
+        return float(self.total_amount) - float(self.paid_amount)
+
+    def recalculate_payment_status(self) -> None:
+        paid = float(self.paid_amount)
+        total = float(self.total_amount)
+        if paid == 0:
+            self.payment_status = PaymentStatus.UNPAID
+        elif paid < total:
+            self.payment_status = PaymentStatus.PARTIAL
+        elif paid == total:
+            self.payment_status = PaymentStatus.PAID
+        else:
+            self.payment_status = PaymentStatus.OVERPAID
+
+    def __repr__(self) -> str:
+        return f"<Deal {self.number} status={self.status}>"
+
+
+class DealItem(Base):
+    __tablename__ = "deal_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    deal_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("deals.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("products.id", ondelete="SET NULL"), nullable=True
+    )
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    total_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+
+    deal: Mapped[Deal] = relationship("Deal", back_populates="items")
+
+
+from app.modules.bookings.models import Booking  # noqa: E402
+from app.modules.payments.models import Payment  # noqa: E402
