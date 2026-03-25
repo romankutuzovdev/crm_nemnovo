@@ -15,13 +15,15 @@ async def site_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    if settings.is_production and not (settings.SITE_WEBHOOK_SECRET or "").strip():
+        raise ForbiddenError("Site webhook is not configured (set SITE_WEBHOOK_SECRET)")
+
     body = await request.body()
     signature = request.headers.get("X-Webhook-Signature", "")
 
-    if settings.SITE_WEBHOOK_SECRET and not verify_hmac_signature(
-        body, signature, settings.SITE_WEBHOOK_SECRET
-    ):
-        raise ForbiddenError("Invalid webhook signature")
+    if settings.SITE_WEBHOOK_SECRET.strip():
+        if not verify_hmac_signature(body, signature, settings.SITE_WEBHOOK_SECRET.strip()):
+            raise ForbiddenError("Invalid webhook signature")
 
     import json
     payload = json.loads(body)

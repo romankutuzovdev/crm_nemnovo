@@ -28,6 +28,27 @@ async def list_payments(
     return await service.list_by_deal(deal_id)
 
 
+@router.get("/order/{order_id}", response_model=list[PaymentResponse])
+async def list_payments_by_order(
+    order_id: UUID,
+    current_user=require_permission("payments", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Alias для ТЗ: order_id вместо deal_id."""
+    service = PaymentService(db)
+    return await service.list_by_deal(order_id)
+
+
+@router.get("/client/{client_id}", response_model=list[PaymentResponse])
+async def list_payments_by_client(
+    client_id: UUID,
+    current_user=require_permission("payments", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PaymentService(db)
+    return await service.list_by_client(client_id)
+
+
 @router.post("/", response_model=PaymentResponse, status_code=201)
 async def create_payment(
     data: PaymentCreate,

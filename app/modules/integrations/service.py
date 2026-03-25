@@ -67,12 +67,14 @@ class IntegrationService:
 
             from app.modules.leads.repository import LeadRepository
             lead_repo = LeadRepository(self.session)
+            assignee = await self.lead_service.pick_assignee_by_load()
             lead = await lead_repo.create(
                 client_id=client.id if client else None,
                 source=LeadSource.TELEPHONY,
                 source_ref=payload.get("call_id"),
                 status=LeadStatus.NEW,
                 raw_payload=payload,
+                assigned_to=assignee,
             )
 
             log.is_processed = True

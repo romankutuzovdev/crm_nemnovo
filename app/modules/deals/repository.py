@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -11,6 +12,27 @@ from app.shared.enums import DealStatus
 
 class DealRepository(BaseRepository[Deal]):
     model = Deal
+
+    async def list(
+        self,
+        filters: dict[str, Any] | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> list[Deal]:
+        stmt = (
+            select(Deal)
+            .options(
+                selectinload(Deal.client),
+                selectinload(Deal.assigned_user),
+            )
+            .order_by(Deal.created_at.desc())
+        )
+        if filters:
+            for key, value in filters.items():
+                stmt = stmt.where(getattr(Deal, key) == value)
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_next_number(self) -> str:
         from datetime import datetime
@@ -26,14 +48,24 @@ class DealRepository(BaseRepository[Deal]):
                 selectinload(Deal.items),
                 selectinload(Deal.bookings),
                 selectinload(Deal.payments),
+                selectinload(Deal.client),
+                selectinload(Deal.assigned_user),
             )
             .where(Deal.id == deal_id)
         )
         return result.scalar_one_or_none()
 
+    async def find_by_number(self, number: str) -> Deal | None:
+        result = await self.session.execute(select(Deal).where(Deal.number == number))
+        return result.scalar_one_or_none()
+
     async def list_by_client(self, client_id: UUID, offset: int = 0, limit: int = 50) -> list[Deal]:
         result = await self.session.execute(
             select(Deal)
+            .options(
+                selectinload(Deal.client),
+                selectinload(Deal.assigned_user),
+            )
             .where(Deal.client_id == client_id)
             .order_by(Deal.created_at.desc())
             .offset(offset).limit(limit)
@@ -43,6 +75,10 @@ class DealRepository(BaseRepository[Deal]):
     async def list_by_manager(self, manager_id: UUID, offset: int = 0, limit: int = 50) -> list[Deal]:
         result = await self.session.execute(
             select(Deal)
+            .options(
+                selectinload(Deal.client),
+                selectinload(Deal.assigned_user),
+            )
             .where(Deal.assigned_to == manager_id)
             .order_by(Deal.created_at.desc())
             .offset(offset).limit(limit)

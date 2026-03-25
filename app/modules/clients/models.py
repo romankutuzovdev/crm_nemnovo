@@ -7,6 +7,7 @@ from app.db.types import GUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.shared.enums import CompanySegment
 
 
 def utcnow() -> datetime:
@@ -22,6 +23,9 @@ class Company(Base):
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    segment: Mapped[str] = mapped_column(
+        String(10), default=CompanySegment.B2B.value, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

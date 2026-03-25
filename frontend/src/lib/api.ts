@@ -6,13 +6,28 @@ export function getApiUrl(path: string): string {
 }
 
 function handleError(res: Response, err: unknown) {
-  const detail = err && typeof err === "object" && "detail" in err ? (err as { detail: unknown }).detail : res.statusText;
-  const msg =
-    typeof detail === "string"
-      ? detail
-      : Array.isArray(detail)
-        ? detail.map((d: { msg?: string }) => d.msg).join(", ") || res.statusText
-        : res.statusText;
+  const detail =
+    err && typeof err === "object" && "detail" in err
+      ? (err as { detail: unknown }).detail
+      : res.statusText;
+  let msg: string;
+  if (typeof detail === "string") {
+    msg = detail;
+  } else if (Array.isArray(detail)) {
+    msg =
+      detail
+        .map((d: unknown) =>
+          typeof d === "object" && d !== null && "msg" in d
+            ? String((d as { msg: string }).msg)
+            : String(d)
+        )
+        .filter(Boolean)
+        .join(", ") || res.statusText;
+  } else if (detail && typeof detail === "object" && "msg" in detail) {
+    msg = String((detail as { msg: string }).msg);
+  } else {
+    msg = res.statusText;
+  }
   throw new Error(msg);
 }
 
@@ -54,9 +69,16 @@ export async function apiFetch<T>(
           const user = state.user!;
           state.setAuth(data.access_token, refreshToken, user);
           res = await doRequest(data.access_token);
+        } else {
+          // refresh истёк или отозван — сбрасываем локальную сессию
+          state.logout();
         }
       } catch {
-        // refresh не удался — пробрасываем исходную ошибку
+        try {
+          useAuthStore.getState().logout();
+        } catch {
+          /* ignore */
+        }
       }
     }
   }

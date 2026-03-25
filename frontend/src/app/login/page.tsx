@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -9,6 +9,9 @@ import { useAuthStore } from "@/store/auth";
 export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
+  const user = useAuthStore((s) => s.user);
+  const getToken = useAuthStore((s) => s.getToken);
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -35,6 +38,18 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  if (!hasHydrated) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-4">
+        <p className="text-slate-500 text-sm">Загрузка…</p>
+      </main>
+    );
+  }
+
+  if (user && getToken()) {
+    return null;
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4">

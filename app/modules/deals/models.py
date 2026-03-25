@@ -50,6 +50,30 @@ class Deal(Base):
     bookings: Mapped[list["Booking"]] = relationship("Booking", back_populates="deal")
     payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="deal")
     client: Mapped["Client"] = relationship("Client", back_populates="deals")
+    assigned_user: Mapped["User | None"] = relationship(
+        "User",
+        foreign_keys=[assigned_to],
+        overlaps="created_by_user",
+    )
+    created_by_user: Mapped["User | None"] = relationship(
+        "User",
+        foreign_keys=[created_by],
+        overlaps="assigned_user",
+    )
+
+    @property
+    def client_name(self) -> str | None:
+        c = self.client
+        if c is None:
+            return None
+        return f"{c.first_name} {c.last_name}".strip()
+
+    @property
+    def assigned_user_name(self) -> str | None:
+        u = self.assigned_user
+        if u is None:
+            return None
+        return u.full_name
 
     @property
     def debt_amount(self) -> float:
@@ -71,6 +95,11 @@ class Deal(Base):
         return f"<Deal {self.number} status={self.status}>"
 
 
+# В терминах ТЗ "Заказ" — основная сущность.
+# Пока оставляем таблицу `deals`, но даём доменное имя Order.
+Order = Deal
+
+
 class DealItem(Base):
     __tablename__ = "deal_items"
 
@@ -90,6 +119,9 @@ class DealItem(Base):
     total_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
 
     deal: Mapped[Deal] = relationship("Deal", back_populates="items")
+
+
+OrderItem = DealItem
 
 
 from app.modules.bookings.models import Booking  # noqa: E402

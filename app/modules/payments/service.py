@@ -108,3 +108,7 @@ class PaymentService:
     async def list_by_deal(self, deal_id: UUID) -> list[Payment]:
         await self.deal_repo.get_or_raise(deal_id)
         return await self.repo.list_by_deal(deal_id)
+
+    async def list_by_client(self, client_id: UUID) -> list[Payment]:
+        # Клиент проверяем через наличие заказов не обязательно — вернём пусто, если нет
+        return await self.repo.list_by_client(client_id)

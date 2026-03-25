@@ -28,6 +28,13 @@ class ServiceType(StrEnum):
     COMBINED = "combined"
 
 
+class CompanySegment(StrEnum):
+    """B2B — юрлицо / ИП; B2C — частное лицо как контрагент (редко)."""
+
+    B2B = "b2b"
+    B2C = "b2c"
+
+
 class DealStatus(StrEnum):
     NEW = "new"
     CONFIRMED = "confirmed"

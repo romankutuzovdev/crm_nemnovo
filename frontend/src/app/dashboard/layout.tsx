@@ -41,11 +41,23 @@ export default function DashboardLayout({
 
   if (!_hasHydrated || !user) return null;
 
+  const navActive = (href: string) =>
+    href === "/dashboard"
+      ? pathname === "/dashboard"
+      : pathname === href || pathname.startsWith(`${href}/`);
+
   const nav = [
     { href: "/dashboard", label: "Главная" },
     { href: "/dashboard/calendar", label: "Календарь" },
+    { href: "/dashboard/leads", label: "Заявки" },
     { href: "/dashboard/clients", label: "Клиенты" },
-    { href: "/dashboard/deals", label: "Сделки" },
+    { href: "/dashboard/companies", label: "Компании" },
+    { href: "/dashboard/orders", label: "Заказы" },
+    { href: "/dashboard/payments", label: "Оплаты" },
+    { href: "/dashboard/assets", label: "Активы" },
+    { href: "/dashboard/stock", label: "Склад" },
+    { href: "/dashboard/reports", label: "Отчёты" },
+    { href: "/dashboard/settings", label: "Настройки" },
   ];
 
   return (
@@ -61,7 +73,7 @@ export default function DashboardLayout({
               key={item.href}
               href={item.href}
               className={`block px-4 py-2 rounded-lg mb-1 transition-colors ${
-                pathname === item.href
+                navActive(item.href)
                   ? "bg-emerald-600/20 text-emerald-400"
                   : "hover:bg-slate-800 text-slate-300"
               }`}

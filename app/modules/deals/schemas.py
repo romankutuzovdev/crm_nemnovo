@@ -24,6 +24,14 @@ class DealItemResponse(UUIDSchema):
     total_price: float
 
 
+class BookingResponse(UUIDSchema):
+    asset_id: UUID
+    start_datetime: datetime
+    end_datetime: datetime
+    quantity: int
+    status: str
+
+
 class BookingInDealCreate(BaseSchema):
     asset_id: UUID
     start_datetime: datetime
@@ -55,8 +63,10 @@ class DealUpdate(BaseSchema):
 class DealResponse(UUIDSchema):
     number: str
     client_id: UUID
+    client_name: str | None = None
     lead_id: UUID | None
     assigned_to: UUID | None
+    assigned_user_name: str | None = None
     service_type: str
     status: str
     start_date: date
@@ -68,5 +78,6 @@ class DealResponse(UUIDSchema):
     payment_status: str
     notes: str | None
     items: list[DealItemResponse]
+    bookings: list[BookingResponse] = []
     created_at: datetime
     updated_at: datetime

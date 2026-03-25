@@ -49,6 +49,11 @@ class LeadAttachClient(BaseSchema):
     client_id: UUID
 
 
+class AssignableUserResponse(BaseSchema):
+    id: UUID
+    full_name: str
+
+
 class LeadResponse(UUIDSchema):
     client_id: UUID | None
     source: str

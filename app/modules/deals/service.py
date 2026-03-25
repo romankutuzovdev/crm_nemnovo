@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 import structlog
@@ -27,6 +28,11 @@ class DealService:
     async def create_deal(self, data: DealCreate, created_by: UUID) -> Deal:
         # Validate client exists
         await self.client_repo.get_or_raise(data.client_id)
+
+        if data.end_date < data.start_date:
+            raise ValidationError("Дата окончания не может быть раньше даты начала")
+        if data.guests_count < 1:
+            raise ValidationError("Число гостей должно быть не меньше 1")
 
         # Validate asset availability for all bookings BEFORE creating anything
         for b in data.bookings:
@@ -105,6 +111,13 @@ class DealService:
     async def update_deal(self, deal_id: UUID, data: DealUpdate, updated_by: UUID) -> Deal:
         deal = await self.repo.get_or_raise(deal_id)
         update_data = data.model_dump(exclude_none=True)
+
+        start: date = update_data.get("start_date", deal.start_date)
+        end: date = update_data.get("end_date", deal.end_date)
+        if end < start:
+            raise ValidationError("Дата окончания не может быть раньше даты начала")
+        if "guests_count" in update_data and update_data["guests_count"] < 1:
+            raise ValidationError("Число гостей должно быть не меньше 1")
 
         async with self.session.begin():
             deal = await self.repo.update(deal_id, **update_data)

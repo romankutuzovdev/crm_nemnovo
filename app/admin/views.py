@@ -31,7 +31,7 @@ class CompanyAdmin(ModelView, model=Company):
     name = "Компания"
     name_plural = "Компании"
     icon = "fa-solid fa-building"
-    column_list = [Company.name, Company.inn, Company.phone, Company.email]
+    column_list = [Company.name, Company.segment, Company.inn, Company.phone, Company.email]
     column_searchable_list = [Company.name, Company.inn]
 
 

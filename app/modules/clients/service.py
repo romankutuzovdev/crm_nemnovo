@@ -1,17 +1,31 @@
 from uuid import UUID
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import write_audit_log
 from app.core.exceptions import ConflictError, NotFoundError
 from app.modules.clients.models import Client, ClientNote
 from app.modules.clients.repository import ClientNoteRepository, ClientRepository, CompanyRepository
-from app.modules.clients.schemas import ClientCreate, ClientNoteCreate, ClientUpdate
+from app.modules.clients.schemas import (
+    ClientAuditEntryResponse,
+    ClientCallEntryResponse,
+    ClientCreate,
+    ClientNoteCreate,
+    ClientUpdate,
+)
 from app.shared.enums import AuditAction
 from app.shared.utils import normalize_phone
 
 logger = structlog.get_logger()
+
+
+def _format_audit_details(payload: dict | None) -> str:
+    if not payload:
+        return "—"
+    parts = [f"{k}: {v}" for k, v in payload.items()]
+    return "; ".join(parts)[:800]
 
 
 class ClientService:
@@ -92,3 +106,55 @@ class ClientService:
         if current_user.role.name == "manager":
             assigned_to = current_user.id
         return await self.repo.search(query, assigned_to=assigned_to, offset=offset, limit=limit)
+
+    async def search_count(self, query: str, current_user) -> int:
+        assigned_to = None
+        if current_user.role.name == "manager":
+            assigned_to = current_user.id
+        return await self.repo.count_search(query, assigned_to=assigned_to)
+
+    async def list_client_audit(self, client_id: UUID, limit: int = 50) -> list[ClientAuditEntryResponse]:
+        await self.repo.get_or_raise(client_id)
+        from app.modules.users.models import AuditLog, User
+
+        result = await self.session.execute(
+            select(AuditLog, User.full_name)
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .where(AuditLog.resource == "clients", AuditLog.resource_id == client_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        rows: list[ClientAuditEntryResponse] = []
+        for log, full_name in result.all():
+            payload = log.after if log.after is not None else log.before
+            rows.append(
+                ClientAuditEntryResponse(
+                    id=log.id,
+                    action=log.action,
+                    user_name=full_name or "—",
+                    created_at=log.created_at,
+                    details=_format_audit_details(payload),
+                )
+            )
+        return rows
+
+    async def list_client_calls(self, client_id: UUID, limit: int = 50) -> list[ClientCallEntryResponse]:
+        """Заявки, созданные телефонией по этому клиенту (источник telephony)."""
+        await self.repo.get_or_raise(client_id)
+        from app.modules.leads.repository import LeadRepository
+
+        lead_repo = LeadRepository(self.session)
+        leads = await lead_repo.list_by_client_and_source(
+            client_id, LeadSource.TELEPHONY.value, limit=limit
+        )
+        return [
+            ClientCallEntryResponse(
+                id=l.id,
+                created_at=l.created_at,
+                status=l.status,
+                source_ref=l.source_ref,
+                comment=l.comment,
+                converted_deal_id=l.converted_deal_id,
+            )
+            for l in leads
+        ]

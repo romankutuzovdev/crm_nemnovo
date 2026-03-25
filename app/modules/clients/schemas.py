@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import EmailStr, field_validator
 
 from app.shared.base_schema import BaseSchema, UUIDSchema
+from app.shared.enums import CompanySegment
 from app.shared.utils import normalize_phone
 
 
@@ -13,6 +14,7 @@ class CompanyCreate(BaseSchema):
     address: str | None = None
     phone: str | None = None
     email: str | None = None
+    segment: CompanySegment = CompanySegment.B2B
 
 
 class CompanyResponse(UUIDSchema):
@@ -20,6 +22,30 @@ class CompanyResponse(UUIDSchema):
     inn: str | None
     address: str | None
     phone: str | None
+    email: str | None
+    segment: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompanyUpdate(BaseSchema):
+    name: str | None = None
+    inn: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+    segment: CompanySegment | None = None
+
+
+class CompanyClientBrief(UUIDSchema):
+    first_name: str
+    last_name: str
+    phone: str
+    email: str | None
+
+
+class CompanyDetailResponse(CompanyResponse):
+    clients: list[CompanyClientBrief]
 
 
 class ClientCreate(BaseSchema):
@@ -74,3 +100,20 @@ class ClientNoteResponse(UUIDSchema):
     author_id: UUID
     text: str
     created_at: datetime
+
+
+class ClientAuditEntryResponse(UUIDSchema):
+    action: str
+    user_name: str
+    created_at: datetime
+    details: str
+
+
+class ClientCallEntryResponse(UUIDSchema):
+    """Событие звонка: заявка с источником telephony (webhook АТС)."""
+
+    created_at: datetime
+    status: str
+    source_ref: str | None
+    comment: str | None
+    converted_deal_id: UUID | None

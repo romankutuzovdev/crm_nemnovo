@@ -59,6 +59,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 **Swagger:** http://localhost:8000/docs  
 **Админка (SQLAdmin):** http://localhost:8000/admin — вход по email/паролю (роли admin, director)
 
+Если база уже существовала до появления новых колонок в моделях, а автогенерация миграций не используется, добавьте недостающие поля вручную. Пример для поля `companies.segment` (тип B2B/B2C):
+
+```sql
+-- SQLite / PostgreSQL
+ALTER TABLE companies ADD COLUMN segment VARCHAR(10) NOT NULL DEFAULT 'b2b';
+```
+
 ---
 
 ## 3. Фронтенд (Next.js)

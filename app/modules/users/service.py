@@ -80,6 +80,9 @@ class UserService:
     async def list_users(self, offset: int = 0, limit: int = 50) -> list[User]:
         return await self.user_repo.list_active(offset=offset, limit=limit)
 
+    async def list_assignable_for_leads(self) -> list[User]:
+        return await self.user_repo.list_assignable_for_leads()
+
     async def deactivate_user(self, user_id: UUID, deactivated_by: UUID) -> None:
         async with self.session.begin():
             await self.user_repo.update(user_id, is_active=False)

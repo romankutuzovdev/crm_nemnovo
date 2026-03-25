@@ -29,6 +29,7 @@ class CalendarRepository:
         end: date,
         asset_id: UUID | None = None,
         manager_id: UUID | None = None,
+        service_type: str | None = None,
     ) -> list[dict]:
         """Возвращает события для календаря: бронирования и заявки."""
         events: list[dict] = []
@@ -53,8 +54,12 @@ class CalendarRepository:
         )
         if asset_id:
             stmt = stmt.where(Booking.asset_id == asset_id)
+        if manager_id or service_type:
+            stmt = stmt.join(Deal, Booking.deal_id == Deal.id)
         if manager_id:
-            stmt = stmt.join(Deal).where(Deal.assigned_to == manager_id)
+            stmt = stmt.where(Deal.assigned_to == manager_id)
+        if service_type:
+            stmt = stmt.where(Deal.service_type == service_type)
 
         result = await self.session.execute(stmt)
         for b in result.scalars().all():
@@ -81,7 +86,10 @@ class CalendarRepository:
                 "color": SERVICE_COLORS.get(b.deal.service_type if b.deal else "", "#6b7280"),
             })
 
-        # Заявки (leads) — активные, без конвертации
+        # Заявки (leads) — активные, без конвертации (без привязки к активу)
+        if asset_id:
+            return events
+
         lead_stmt = (
             select(Lead)
             .where(
@@ -96,6 +104,8 @@ class CalendarRepository:
         )
         if manager_id:
             lead_stmt = lead_stmt.where(Lead.assigned_to == manager_id)
+        if service_type:
+            lead_stmt = lead_stmt.where(Lead.service_type == service_type)
 
         lead_result = await self.session.execute(lead_stmt)
         for lead in lead_result.scalars().all():

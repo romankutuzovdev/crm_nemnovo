@@ -31,8 +31,17 @@ class ValidationError(HTTPException):
 
 
 class AssetConflictError(ConflictError):
-    def __init__(self, asset_name: str):
-        super().__init__(detail=f"Asset '{asset_name}' is already booked for the requested period")
+    """Объект уже занят в выбранный интервал (пересечение бронирований)."""
+
+    def __init__(self, asset_name: str | None = None, *, detail: str | None = None) -> None:
+        if detail is not None:
+            super().__init__(detail=detail)
+        elif asset_name is not None:
+            super().__init__(
+                detail=f"Объект «{asset_name}» уже занят на выбранное время"
+            )
+        else:
+            super().__init__(detail="Выбранное время занято")
 
 
 class InsufficientPaymentError(ValidationError):

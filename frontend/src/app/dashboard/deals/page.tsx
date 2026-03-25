@@ -19,9 +19,9 @@ export default function DealsPage() {
   const getToken = useAuthStore((s) => s.getToken);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["deals"],
+    queryKey: ["orders"],
     queryFn: () =>
-      apiFetch<Paginated<Deal>>("/deals/", {
+      apiFetch<Paginated<Deal>>("/orders/", {
         token: getToken() ?? undefined,
       }),
     enabled: !!getToken(),
@@ -38,13 +38,13 @@ export default function DealsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Сделки</h1>
+      <h1 className="text-2xl font-bold mb-4">Заказы</h1>
       {deals && deals.length > 0 ? (
         <div className="rounded-xl border border-slate-700 overflow-hidden">
           <table className="w-full">
             <thead className="bg-slate-800/50">
               <tr>
-                <th className="text-left p-4">Название</th>
+                <th className="text-left p-4">Номер</th>
                 <th className="text-left p-4">Статус</th>
                 <th className="text-left p-4">Сумма</th>
               </tr>
@@ -61,7 +61,7 @@ export default function DealsPage() {
           </table>
         </div>
       ) : (
-        <p className="text-slate-500">Пока нет сделок</p>
+        <p className="text-slate-500">Пока нет заказов</p>
       )}
     </div>
   );

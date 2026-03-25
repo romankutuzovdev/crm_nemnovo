@@ -8,7 +8,9 @@ from app.core.exceptions import ValidationError
 from app.modules.clients.service import ClientService
 from app.modules.leads.models import Lead
 from app.modules.leads.repository import LeadRepository
+from app.modules.users.repository import UserRepository
 from app.modules.leads.schemas import LeadFromSiteCreate, LeadUpdate
+from app.modules.leads.convert_schemas import LeadConvertToOrderRequest
 from app.shared.enums import AuditAction, LeadSource, LeadStatus
 
 logger = structlog.get_logger()
@@ -19,6 +21,19 @@ class LeadService:
         self.session = session
         self.repo = LeadRepository(session)
         self.client_service = ClientService(session)
+        self.user_repo = UserRepository(session)
+
+    async def pick_assignee_by_load(self) -> UUID | None:
+        """Назначить менеджера с минимальным числом активных заявок (new / in_progress)."""
+        managers = await self.user_repo.list_active_by_role_name("manager")
+        if not managers:
+            return None
+        scored: list[tuple[int, str, UUID]] = []
+        for m in managers:
+            n = await self.repo.count_open_leads_for_manager(m.id)
+            scored.append((n, str(m.id), m.id))
+        scored.sort(key=lambda x: (x[0], x[1]))
+        return scored[0][2]
 
     async def create_from_site(self, data: LeadFromSiteCreate) -> Lead:
         """Handle incoming lead from website form. Deduplicates client by phone."""
@@ -30,6 +45,7 @@ class LeadService:
             source=LeadSource.SITE_FORM,
         )
 
+        assignee = await self.pick_assignee_by_load()
         lead = await self.repo.create(
             client_id=client.id,
             source=LeadSource.SITE_FORM,
@@ -40,6 +56,7 @@ class LeadService:
             guests_count=data.guests_count,
             comment=data.comment,
             raw_payload=data.model_dump(mode="json"),
+            assigned_to=assignee,
         )
 
         logger.info(
@@ -69,7 +86,9 @@ class LeadService:
         return lead
 
     async def update_lead(self, lead_id: UUID, data: LeadUpdate, updated_by: UUID) -> Lead:
-        await self.repo.get_or_raise(lead_id)
+        lead = await self.repo.get_or_raise(lead_id)
+        if lead.status == LeadStatus.CONVERTED:
+            raise ValidationError("Cannot modify a converted lead")
         update_data = data.model_dump(exclude_none=True)
 
         async with self.session.begin():
@@ -78,3 +97,64 @@ class LeadService:
                 self.session, updated_by, AuditAction.UPDATE, "leads", lead_id, after=update_data
             )
         return lead
+
+    async def convert_to_order(self, lead_id: UUID, data: LeadConvertToOrderRequest, created_by: UUID):
+        """Конвертирует заявку в заказ и помечает заявку как converted."""
+        lead = await self.repo.get_or_raise(lead_id)
+        if lead.status == LeadStatus.CONVERTED:
+            raise ValidationError("Lead already converted")
+
+        from datetime import date as dt_date
+        from app.modules.orders.schemas import OrderCreate, OrderItemCreate
+        from app.modules.orders.service import OrderService
+        from app.shared.enums import ServiceType
+
+        client_id = data.client_id or lead.client_id
+        if not client_id:
+            raise ValidationError("Lead has no client. Attach a client first.")
+
+        # Даты: из payload, иначе preferred_date, иначе сегодня
+        base_date = data.start_date or lead.preferred_date or dt_date.today()
+        start_date = data.start_date or base_date
+        end_date = data.end_date or base_date
+
+        order_data = OrderCreate(
+            client_id=client_id,
+            lead_id=lead.id,
+            service_type=data.service_type or lead.service_type or ServiceType.COMBINED,
+            start_date=start_date,
+            end_date=end_date,
+            guests_count=data.guests_count or lead.guests_count or 1,
+            notes=data.notes or lead.comment,
+            items=[
+                OrderItemCreate(
+                    description="Заказ (из заявки)",
+                    quantity=1,
+                    unit_price=float(data.total_amount or 0.0),
+                )
+            ],
+            bookings=[],
+        )
+
+        async with self.session.begin():
+            order_service = OrderService(self.session)
+            order = await order_service.create_order(order_data, created_by=created_by)
+
+            # приоритет: явный assigned_to из запроса
+            if data.assigned_to:
+                order.assigned_to = data.assigned_to
+
+            # lead -> converted + связь
+            lead.status = LeadStatus.CONVERTED
+            lead.converted_deal_id = order.id
+
+            await write_audit_log(
+                self.session,
+                created_by,
+                AuditAction.UPDATE,
+                "leads",
+                lead_id,
+                after={"status": LeadStatus.CONVERTED, "converted_order_id": str(order.id)},
+            )
+
+        return order

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.calendar.repository import CalendarRepository
+from app.shared.enums import ServiceType
 from pydantic import BaseModel
 
 from app.modules.calendar.schemas import CalendarEventResponse, CalendarQuickCreate
@@ -17,7 +18,7 @@ class BookingMoveRequest(BaseModel):
     end: str
 
 
-from app.modules.deals.schemas import BookingInDealCreate, DealCreate, DealItemCreate
+from app.modules.orders.schemas import BookingInOrderCreate, OrderCreate, OrderItemCreate
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -28,6 +29,7 @@ async def get_calendar_events(
     end: date = Query(...),
     asset_id: UUID | None = Query(None),
     manager_id: UUID | None = Query(None, description="Фильтр по менеджеру"),
+    service_type: ServiceType | None = Query(None, description="Тип услуги заказа / заявки"),
     current_user=require_permission("bookings", "read"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -36,7 +38,10 @@ async def get_calendar_events(
     if current_user.role.name == "manager":
         manager_id = current_user.id
     repo = CalendarRepository(db)
-    events = await repo.get_events(start, end, asset_id=asset_id, manager_id=manager_id)
+    st = service_type.value if service_type else None
+    events = await repo.get_events(
+        start, end, asset_id=asset_id, manager_id=manager_id, service_type=st
+    )
     return events
 
 
@@ -64,7 +69,7 @@ async def move_booking(
     asset_repo = AssetRepository(db)
     has_conflict = await asset_repo.has_conflict(booking.asset_id, start_dt, end_dt, exclude_booking_id=booking_id)
     if has_conflict:
-        raise AssetConflictError("Выбранное время занято")
+        raise AssetConflictError()
 
     booking.start_datetime = start_dt
     booking.end_datetime = end_dt
@@ -74,13 +79,13 @@ async def move_booking(
 @router.post("/events", status_code=201)
 async def create_calendar_event(
     data: CalendarQuickCreate,
-    current_user=require_permission("deals", "write"),
+    current_user=require_permission("orders", "write"),
     db: AsyncSession = Depends(get_db),
 ):
     """Быстрое создание бронирования из календаря (клик по дате)."""
-    from app.modules.deals.service import DealService
+    from app.modules.orders.service import OrderService
 
-    deal_data = DealCreate(
+    order_data = OrderCreate(
         client_id=data.client_id,
         lead_id=None,
         service_type=data.service_type,
@@ -88,15 +93,15 @@ async def create_calendar_event(
         end_date=data.end_datetime.date(),
         guests_count=data.guests_count,
         notes=data.notes,
-        items=[DealItemCreate(description="Бронирование", quantity=1, unit_price=0)],
+        items=[OrderItemCreate(description="Бронирование", quantity=1, unit_price=0)],
         bookings=[
-            BookingInDealCreate(
+            BookingInOrderCreate(
                 asset_id=data.asset_id,
                 start_datetime=data.start_datetime,
                 end_datetime=data.end_datetime,
             )
         ],
     )
-    service = DealService(db)
-    deal = await service.create_deal(deal_data, created_by=current_user.id)
-    return {"id": str(deal.id), "message": "Сделка создана"}
+    service = OrderService(db)
+    order = await service.create_order(order_data, created_by=current_user.id)
+    return {"id": str(order.id), "message": "Заказ создан"}

@@ -8,12 +8,15 @@ import Link from "next/link";
 export default function Home() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const getToken = useAuthStore((s) => s.getToken);
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
 
   useEffect(() => {
-    if (user) {
+    if (!hasHydrated) return;
+    if (user && getToken()) {
       router.replace("/dashboard");
     }
-  }, [user, router]);
+  }, [hasHydrated, user, getToken, router]);
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8">

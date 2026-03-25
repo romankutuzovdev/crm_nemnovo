@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
-import type { DatesSetArg, EventClickArg, EventDropArg } from "@fullcalendar/core";
+import type { DatesSetArg, EventDropArg } from "@fullcalendar/core";
+import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+
+interface AssignableUser {
+  id: string;
+  full_name: string;
+}
 
 interface CalendarEvent {
   id: string;
@@ -34,16 +41,37 @@ interface Paginated<T> {
   items: T[];
 }
 
+const SERVICE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Все услуги" },
+  { value: "rafting", label: "Сплав" },
+  { value: "hostel", label: "Хостел" },
+  { value: "rent", label: "Аренда" },
+  { value: "combined", label: "Комбо" },
+];
+
 export default function Calendar() {
   const getToken = useAuthStore((s) => s.getToken);
+  const user = useAuthStore((s) => s.user);
+  const isManagerRole = user?.role?.name === "manager";
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [dateRange, setDateRange] = useState<{ start: Date; end: Date } | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("");
+  const [assetFilter, setAssetFilter] = useState<string>("");
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [addDate, setAddDate] = useState<{ start: string; end: string } | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const calendarRef = useRef<FullCalendar>(null);
+
+  const { data: assignableManagers = [] } = useQuery({
+    queryKey: ["leads", "assignable-users"],
+    queryFn: () =>
+      apiFetch<AssignableUser[]>("/leads/assignable-users", {
+        token: getToken() ?? undefined,
+      }),
+    enabled: !!getToken() && !isManagerRole,
+  });
 
   const fetchEvents = async (start: Date, end: Date) => {
     const token = getToken();
@@ -53,6 +81,8 @@ export default function Calendar() {
       end: end.toISOString().slice(0, 10),
     });
     if (managerFilter) params.set("manager_id", managerFilter);
+    if (assetFilter) params.set("asset_id", assetFilter);
+    if (serviceTypeFilter) params.set("service_type", serviceTypeFilter);
     const data = await apiFetch<Array<Record<string, unknown>>>(
       `/calendar/events?${params}`,
       { token }
@@ -73,7 +103,7 @@ export default function Calendar() {
     if (dateRange) {
       fetchEvents(dateRange.start, dateRange.end);
     }
-  }, [dateRange, managerFilter, getToken]);
+  }, [dateRange, managerFilter, assetFilter, serviceTypeFilter, getToken]);
 
   const handleDatesSet = (info: DatesSetArg) => {
     setDateRange({ start: info.start, end: info.end });
@@ -92,7 +122,7 @@ export default function Calendar() {
     setShowAddModal(true);
   };
 
-  const handleEventDrop = async (info: EventDropArg) => {
+  const persistBookingRange = async (info: EventDropArg | EventResizeDoneArg) => {
     const id = info.event.id;
     if (!id.startsWith("booking:")) return;
     const bookingId = id.replace("booking:", "");
@@ -105,12 +135,21 @@ export default function Calendar() {
           end: info.event.end?.toISOString(),
         }),
       });
-      info.revert();
-      if (dateRange) fetchEvents(dateRange.start, dateRange.end);
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Ошибка перемещения");
+      const msg =
+        err instanceof Error ? err.message : "Не удалось сохранить время бронирования";
+      alert(msg);
       info.revert();
     }
+  };
+
+  const handleEventDrop = (info: EventDropArg) => {
+    void persistBookingRange(info);
+  };
+
+  const handleEventResize = (info: EventResizeDoneArg) => {
+    void persistBookingRange(info);
   };
 
   const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -164,15 +203,48 @@ export default function Calendar() {
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b border-slate-700 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-slate-700 shrink-0">
         <h1 className="text-xl font-bold">Календарь заказов</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center justify-end">
+          {isManagerRole ? (
+            <span className="text-sm text-slate-400 px-2">Только ваши бронирования</span>
+          ) : (
+            <select
+              value={managerFilter}
+              onChange={(e) => setManagerFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-sm min-w-[180px]"
+            >
+              <option value="">Все менеджеры</option>
+              {assignableManagers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.full_name}
+                </option>
+              ))}
+            </select>
+          )}
           <select
-            value={managerFilter}
-            onChange={(e) => setManagerFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-sm"
+            value={assetFilter}
+            onChange={(e) => setAssetFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-sm min-w-[160px]"
+            title="Фильтр по объекту (бронирования). Заявки без объекта скрываются."
           >
-            <option value="">Все менеджеры</option>
+            <option value="">Все объекты</option>
+            {assets.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.code})
+              </option>
+            ))}
+          </select>
+          <select
+            value={serviceTypeFilter}
+            onChange={(e) => setServiceTypeFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-sm min-w-[150px]"
+          >
+            {SERVICE_FILTER_OPTIONS.map((o) => (
+              <option key={o.value || "all"} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
           <button
             onClick={() => {
@@ -215,6 +287,7 @@ export default function Calendar() {
           datesSet={handleDatesSet}
           dateClick={handleDateClick}
           eventDrop={handleEventDrop}
+          eventResize={handleEventResize}
           editable={true}
           droppable={true}
           slotMinTime="06:00:00"

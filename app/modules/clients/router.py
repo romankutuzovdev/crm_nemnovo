@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.clients.schemas import (
+    ClientAuditEntryResponse,
+    ClientCallEntryResponse,
     ClientCreate,
     ClientNoteCreate,
     ClientNoteResponse,
@@ -29,9 +31,34 @@ async def list_clients(
     db: AsyncSession = Depends(get_db),
 ):
     service = ClientService(db)
-    items = await service.search(search, current_user, offset=offset, limit=limit)
-    total = await service.repo.count()
+    q = search.strip()
+    items = await service.search(q, current_user, offset=offset, limit=limit)
+    total = await service.search_count(q, current_user)
     return PaginatedResponse(items=items, total=total, offset=offset, limit=limit)
+
+
+@router.get("/{client_id}/audit", response_model=list[ClientAuditEntryResponse])
+async def list_client_audit(
+    client_id: UUID,
+    limit: int = Query(50, ge=1, le=200),
+    current_user=require_permission("clients", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Журнал изменений карточки клиента (audit trail)."""
+    service = ClientService(db)
+    return await service.list_client_audit(client_id, limit=limit)
+
+
+@router.get("/{client_id}/calls", response_model=list[ClientCallEntryResponse])
+async def list_client_calls(
+    client_id: UUID,
+    limit: int = Query(50, ge=1, le=200),
+    current_user=require_permission("clients", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    """События звонков (заявки telephony), привязанные к клиенту."""
+    service = ClientService(db)
+    return await service.list_client_calls(client_id, limit=limit)
 
 
 @router.get("/{client_id}", response_model=ClientResponse)
