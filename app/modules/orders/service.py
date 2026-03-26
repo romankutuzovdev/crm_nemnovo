@@ -1,10 +1,12 @@
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.modules.deals.service import DealService
-from app.modules.orders.schemas import OrderCreate, OrderUpdate
+from app.modules.orders.schemas import OrderAuditEntryResponse, OrderCreate, OrderUpdate
+from app.shared.enums import DealStatus
 
 
 class OrderService:
@@ -31,4 +33,33 @@ class OrderService:
         if not deal:
             raise NotFoundError(f"Заказ с номером «{number.strip()}» не найден")
         return await self._deal.get_deal(deal.id)
+
+    async def transition_status(self, order_id: UUID, status: DealStatus, updated_by: UUID):
+        return await self._deal.transition_status(order_id, status=status, updated_by=updated_by)
+
+    async def list_order_audit(self, order_id: UUID, limit: int = 50) -> list[OrderAuditEntryResponse]:
+        await self.repo.get_or_raise(order_id)
+        from app.modules.users.models import AuditLog, User
+
+        result = await self._deal.session.execute(
+            select(AuditLog, User.full_name)
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .where(AuditLog.resource == "deals", AuditLog.resource_id == order_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        rows: list[OrderAuditEntryResponse] = []
+        for log, full_name in result.all():
+            payload = log.after if log.after is not None else log.before
+            parts = [f"{k}: {v}" for k, v in (payload or {}).items()]
+            rows.append(
+                OrderAuditEntryResponse(
+                    id=log.id,
+                    action=log.action,
+                    user_name=full_name or "—",
+                    created_at=log.created_at,
+                    details=("; ".join(parts) if parts else "—")[:800],
+                )
+            )
+        return rows
 

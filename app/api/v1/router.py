@@ -13,6 +13,9 @@ from app.modules.calendar.router import router as calendar_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.integrations.router import router as integrations_router
 from app.modules.reports.router import router as reports_router
+from app.modules.rafting.router import router as rafting_router
+from app.modules.hostel.router import router as hostel_router
+from app.modules.rent.router import router as rent_router
 
 api_router = APIRouter()
 
@@ -29,3 +32,6 @@ api_router.include_router(calendar_router)
 api_router.include_router(notifications_router)
 api_router.include_router(integrations_router)
 api_router.include_router(reports_router)
+api_router.include_router(rafting_router)
+api_router.include_router(hostel_router)
+api_router.include_router(rent_router)

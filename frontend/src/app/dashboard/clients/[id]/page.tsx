@@ -77,6 +77,7 @@ interface ClientCallEntry {
   status: string;
   source_ref: string | null;
   comment: string | null;
+  recording_url: string | null;
   converted_deal_id: string | null;
 }
 
@@ -500,6 +501,7 @@ export default function ClientDetailsPage() {
                 <th className="text-left p-4">ID звонка (АТС)</th>
                 <th className="text-left p-4">Заказ</th>
                 <th className="text-left p-4">Комментарий</th>
+                <th className="text-left p-4">Запись</th>
               </tr>
             </thead>
             <tbody>
@@ -525,11 +527,25 @@ export default function ClientDetailsPage() {
                   <td className="p-4 text-sm text-slate-300 max-w-xs break-words">
                     {c.comment ?? "—"}
                   </td>
+                  <td className="p-4 text-sm">
+                    {c.recording_url ? (
+                      <a
+                        className="text-emerald-400 hover:underline"
+                        href={c.recording_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Открыть
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               ))}
               {(!callEvents || callEvents.length === 0) && (
                 <tr className="border-t border-slate-700">
-                  <td className="p-4 text-slate-500" colSpan={5}>
+                  <td className="p-4 text-slate-500" colSpan={6}>
                     Звонков по этому клиенту пока нет. После настройки webhook телефонии события появятся
                     автоматически.
                   </td>

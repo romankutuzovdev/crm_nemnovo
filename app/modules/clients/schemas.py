@@ -116,4 +116,5 @@ class ClientCallEntryResponse(UUIDSchema):
     status: str
     source_ref: str | None
     comment: str | None
+    recording_url: str | None
     converted_deal_id: UUID | None

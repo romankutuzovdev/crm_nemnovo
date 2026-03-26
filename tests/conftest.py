@@ -11,7 +11,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 
-TEST_DATABASE_URL = "postgresql+asyncpg://crm_user:crm_pass@localhost:5432/crm_test"
+TEST_DATABASE_URL = "sqlite+aiosqlite:///./crm_test.db"
 
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestSessionLocal = async_sessionmaker(

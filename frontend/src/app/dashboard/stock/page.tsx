@@ -16,6 +16,16 @@ interface Product {
   is_rentable: boolean;
 }
 
+interface StockMovement {
+  id: string;
+  product_id: string;
+  delta_qty: number;
+  new_quantity: number;
+  reason: string | null;
+  created_by: string;
+  created_at: string;
+}
+
 const UNIT_LABELS: Record<string, string> = {
   pcs: "шт.",
   kg: "кг",
@@ -31,6 +41,10 @@ export default function StockPage() {
   const queryClient = useQueryClient();
 
   const [showCreate, setShowCreate] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [adjustProductId, setAdjustProductId] = useState<string | null>(null);
+  const [adjustDelta, setAdjustDelta] = useState("0");
+  const [adjustReason, setAdjustReason] = useState("");
   const [form, setForm] = useState({
     name: "",
     sku: "",
@@ -82,6 +96,44 @@ export default function StockPage() {
 
   const products = data ?? [];
 
+  const { data: movements } = useQuery({
+    queryKey: ["product-movements", adjustProductId],
+    queryFn: () =>
+      apiFetch<StockMovement[]>(
+        `/assets/products/${adjustProductId}/movements`,
+        { token }
+      ),
+    enabled: !!token && !!adjustProductId && showAdjust,
+  });
+
+  const adjustStock = useMutation({
+    mutationFn: () =>
+      apiFetch<StockMovement>(
+        `/assets/products/${adjustProductId}/adjust`,
+        {
+          method: "POST",
+          token,
+          body: JSON.stringify({
+            delta_qty: Number(adjustDelta),
+            reason: adjustReason.trim() ? adjustReason.trim() : null,
+          }),
+        }
+      ),
+    onSuccess: async () => {
+      const pid = adjustProductId;
+      setShowAdjust(false);
+      setAdjustProductId(null);
+      setAdjustDelta("0");
+      setAdjustReason("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["product-movements", pid],
+        }),
+      ]);
+    },
+  });
+
   if (isLoading) return <div className="text-slate-500">Загрузка...</div>;
   if (error)
     return (
@@ -123,6 +175,7 @@ export default function StockPage() {
                 <th className="text-right p-4">Цена</th>
                 <th className="text-right p-4">Остаток</th>
                 <th className="text-left p-4">Аренда</th>
+                {canWrite && <th className="text-left p-4">Действия</th>}
               </tr>
             </thead>
             <tbody>
@@ -135,6 +188,21 @@ export default function StockPage() {
                   <td className="p-4 text-right">{Number(p.price).toLocaleString("ru")} ₽</td>
                   <td className="p-4 text-right">{p.stock_quantity}</td>
                   <td className="p-4">{p.is_rentable ? "да" : "—"}</td>
+                  {canWrite && (
+                    <td className="p-4">
+                      <button
+                        onClick={() => {
+                          setAdjustProductId(p.id);
+                          setAdjustDelta("0");
+                          setAdjustReason("");
+                          setShowAdjust(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm"
+                      >
+                        Учёт
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -243,6 +311,104 @@ export default function StockPage() {
               >
                 {createProduct.isPending ? "Сохранение…" : "Создать"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAdjust && adjustProductId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Учёт остатка</h2>
+              <button
+                type="button"
+                onClick={() => setShowAdjust(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Изменение, {`(+/-)`}</label>
+                <input
+                  type="number"
+                  step="1"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
+                  value={adjustDelta}
+                  onChange={(e) => setAdjustDelta(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Причина</label>
+                <input
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  placeholder="например инвентаризация"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+                onClick={() => setShowAdjust(false)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                disabled={adjustStock.isPending || Number(adjustDelta) === 0}
+                onClick={() => adjustStock.mutate()}
+              >
+                {adjustStock.isPending ? "Сохранение..." : "Провести"}
+              </button>
+            </div>
+
+            {adjustStock.isError && (
+              <div className="text-red-400 text-sm mt-3">
+                Ошибка: {adjustStock.error instanceof Error ? adjustStock.error.message : "Неизвестная ошибка"}
+              </div>
+            )}
+
+            <div className="mt-6">
+              <h3 className="text-sm text-slate-300 mb-2">Последние движения</h3>
+              <div className="rounded-lg border border-slate-700 overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-800/50">
+                    <tr>
+                      <th className="text-left p-3">Когда</th>
+                      <th className="text-left p-3">Delta</th>
+                      <th className="text-left p-3">Новый остаток</th>
+                      <th className="text-left p-3">Причина</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(movements ?? []).map((m) => (
+                      <tr key={m.id} className="border-t border-slate-700">
+                        <td className="p-3 text-slate-300">
+                          {new Date(m.created_at).toLocaleString("ru")}
+                        </td>
+                        <td className="p-3">{m.delta_qty}</td>
+                        <td className="p-3">{m.new_quantity}</td>
+                        <td className="p-3 text-sm text-slate-300">{m.reason ?? "—"}</td>
+                      </tr>
+                    ))}
+                    {(!movements || movements.length === 0) && (
+                      <tr className="border-t border-slate-700">
+                        <td className="p-3 text-slate-500" colSpan={4}>
+                          Нет движений
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

@@ -9,7 +9,7 @@ from app.modules.clients.service import ClientService
 from app.modules.leads.models import Lead
 from app.modules.leads.repository import LeadRepository
 from app.modules.users.repository import UserRepository
-from app.modules.leads.schemas import LeadFromSiteCreate, LeadUpdate
+from app.modules.leads.schemas import LeadAuditEntryResponse, LeadFromSiteCreate, LeadUpdate
 from app.modules.leads.convert_schemas import LeadConvertToOrderRequest
 from app.shared.enums import AuditAction, LeadSource, LeadStatus
 
@@ -158,3 +158,30 @@ class LeadService:
             )
 
         return order
+
+    async def list_lead_audit(self, lead_id: UUID, limit: int = 50) -> list[LeadAuditEntryResponse]:
+        await self.repo.get_or_raise(lead_id)
+        from sqlalchemy import select
+        from app.modules.users.models import AuditLog, User
+
+        result = await self.session.execute(
+            select(AuditLog, User.full_name)
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .where(AuditLog.resource == "leads", AuditLog.resource_id == lead_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        rows: list[LeadAuditEntryResponse] = []
+        for log, full_name in result.all():
+            payload = log.after if log.after is not None else log.before
+            parts = [f"{k}: {v}" for k, v in (payload or {}).items()]
+            rows.append(
+                LeadAuditEntryResponse(
+                    id=log.id,
+                    action=log.action,
+                    user_name=full_name or "—",
+                    created_at=log.created_at,
+                    details=("; ".join(parts) if parts else "—")[:800],
+                )
+            )
+        return rows

@@ -20,6 +20,14 @@ interface Lead {
   created_at: string;
 }
 
+interface LeadAuditEntry {
+  id: string;
+  action: string;
+  user_name: string;
+  created_at: string;
+  details: string;
+}
+
 interface Paginated<T> {
   items: T[];
 }
@@ -57,6 +65,7 @@ export default function LeadsPage() {
   const [clientSearch, setClientSearch] = useState("");
   const [commentModal, setCommentModal] = useState<Lead | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
+  const [auditForLead, setAuditForLead] = useState<Lead | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["leads"],
@@ -67,6 +76,16 @@ export default function LeadsPage() {
     enabled: !!getToken(),
   });
   const leads = data?.items ?? [];
+
+  const { data: leadAudit } = useQuery({
+    queryKey: ["lead-audit", auditForLead?.id],
+    queryFn: () =>
+      apiFetch<LeadAuditEntry[]>(
+        `/leads/${auditForLead!.id}/audit`,
+        { token: getToken() ?? undefined }
+      ),
+    enabled: !!getToken() && !!auditForLead,
+  });
 
   const { data: assignable = [] } = useQuery({
     queryKey: ["leads", "assignable-users"],
@@ -315,6 +334,13 @@ export default function LeadsPage() {
                           {busyLeadId === l.id ? "..." : "В заказ"}
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => setAuditForLead(l)}
+                        className="ml-2 text-slate-300 hover:text-white text-xs underline underline-offset-2"
+                      >
+                        История
+                      </button>
                       {convert.isError && busyLeadId === l.id && (
                         <div className="text-red-400 text-xs mt-1">
                           {convert.error instanceof Error ? convert.error.message : "Ошибка"}
@@ -442,6 +468,54 @@ export default function LeadsPage() {
               >
                 Сохранить
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {auditForLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-3xl w-full shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">История заявки</h2>
+              <button
+                type="button"
+                onClick={() => setAuditForLead(null)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="rounded-lg border border-slate-700 overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-slate-800/50">
+                  <tr>
+                    <th className="text-left p-3 text-sm">Когда</th>
+                    <th className="text-left p-3 text-sm">Действие</th>
+                    <th className="text-left p-3 text-sm">Пользователь</th>
+                    <th className="text-left p-3 text-sm">Детали</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(leadAudit ?? []).map((a) => (
+                    <tr key={a.id} className="border-t border-slate-700">
+                      <td className="p-3 text-sm text-slate-300 whitespace-nowrap">
+                        {new Date(a.created_at).toLocaleString("ru")}
+                      </td>
+                      <td className="p-3 text-sm">{a.action}</td>
+                      <td className="p-3 text-sm text-slate-300">{a.user_name}</td>
+                      <td className="p-3 text-sm text-slate-300">{a.details}</td>
+                    </tr>
+                  ))}
+                  {(!leadAudit || leadAudit.length === 0) && (
+                    <tr className="border-t border-slate-700">
+                      <td className="p-3 text-slate-500 text-sm" colSpan={4}>
+                        История пуста
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

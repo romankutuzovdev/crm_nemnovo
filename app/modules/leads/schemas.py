@@ -66,3 +66,10 @@ class LeadResponse(UUIDSchema):
     converted_deal_id: UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class LeadAuditEntryResponse(UUIDSchema):
+    action: str
+    user_name: str
+    created_at: datetime
+    details: str

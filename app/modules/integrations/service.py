@@ -68,11 +68,38 @@ class IntegrationService:
             from app.modules.leads.repository import LeadRepository
             lead_repo = LeadRepository(self.session)
             assignee = await self.lead_service.pick_assignee_by_load()
+
+            call_id = payload.get("call_id") or payload.get("callId") or payload.get("id")
+            telephony_comment = (
+                payload.get("comment")
+                or payload.get("event")
+                or payload.get("status")
+                or payload.get("direction")
+            )
+            if call_id:
+                existing = await lead_repo.find_by_source_ref(
+                    LeadSource.TELEPHONY.value, call_id
+                )
+                if existing:
+                    # Update existing lead (avoid duplicates for repeated telephony events)
+                    existing.client_id = existing.client_id or (client.id if client else None)
+                    if telephony_comment:
+                        existing.comment = str(telephony_comment)
+                    existing.raw_payload = payload
+                    log.is_processed = True
+                    await self.session.flush()
+                    return {
+                        "status": "ok",
+                        "lead_id": str(existing.id),
+                        "client_found": client is not None,
+                    }
+
             lead = await lead_repo.create(
                 client_id=client.id if client else None,
                 source=LeadSource.TELEPHONY,
-                source_ref=payload.get("call_id"),
+                source_ref=call_id,
                 status=LeadStatus.NEW,
+                comment=str(telephony_comment) if telephony_comment else None,
                 raw_payload=payload,
                 assigned_to=assignee,
             )

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
+from app.shared.base_schema import UUIDSchema
 from app.modules.deals.schemas import (  # Совместимость: данные хранятся в deals
     BookingInDealCreate as BookingInOrderCreate,
     DealCreate as OrderCreate,
@@ -10,6 +11,13 @@ from app.modules.deals.schemas import (  # Совместимость: данн�
     DealUpdate as OrderUpdate,
 )
 
+
+class OrderAuditEntryResponse(UUIDSchema):
+    action: str
+    user_name: str
+    created_at: datetime
+    details: str
+
 # Публичные имена (TЗ: "Заказ")
 __all__ = [
     "BookingInOrderCreate",
@@ -17,6 +25,7 @@ __all__ = [
     "OrderItemCreate",
     "OrderItemResponse",
     "OrderResponse",
+    "OrderAuditEntryResponse",
     "OrderUpdate",
     "UUID",
     "date",

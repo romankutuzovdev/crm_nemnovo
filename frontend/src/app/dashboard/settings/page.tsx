@@ -3,6 +3,7 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_PREFIX = "/api/v1";
 const SITE_WEBHOOK_PATH = `${API_PREFIX}/webhooks/site`;
+const TELEPHONY_WEBHOOK_PATH = `${API_PREFIX}/webhooks/telephony`;
 
 const EXAMPLE_JSON = `{
   "first_name": "Иван",
@@ -26,6 +27,7 @@ sig = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
 export default function SettingsPage() {
   const fullUrl = `${API_URL}${SITE_WEBHOOK_PATH}`;
+  const telephonyUrl = `${API_URL}${TELEPHONY_WEBHOOK_PATH}`;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -59,6 +61,50 @@ export default function SettingsPage() {
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5 text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100 mb-2">Телефония (webhook)</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Входящие события телефонии создают заявку со статусом «Новая» и источником <code className="text-slate-300">telephony</code>.
+          Дедупликация идёт по <code className="text-slate-300">call_id</code>.
+        </p>
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="text-slate-500">Метод и URL</dt>
+            <dd>
+              <code className="block mt-1 p-2 rounded-lg bg-slate-900 border border-slate-600 break-all">
+                POST {telephonyUrl}
+              </code>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Заголовок подписи</dt>
+            <dd>
+              <code className="text-emerald-400/90">X-Telephony-Signature</code> — hex HMAC-SHA256 от сырых байт тела.
+              Секрет: <code className="text-slate-300">TELEPHONY_WEBHOOK_SECRET</code>.
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5 text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100 mb-2">SMS</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Используется очередь (Celery). Настройки берутся из окружения API:
+          <code className="text-slate-300"> SMS_API_KEY</code>, <code className="text-slate-300">SMS_SENDER</code>.
+          Шаблоны можно создавать через API <code className="text-slate-300">/api/v1/notifications/templates</code>.
+        </p>
+      </section>
+
+      <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5 text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100 mb-2">Онлайн-оплата</h2>
+        <p className="text-sm text-slate-400">
+          Сейчас реализована заглушка инициализации платежа (создаётся pending-платёж).
+          Для реальной интеграции задайте <code className="text-slate-300">YOOKASSA_SHOP_ID</code>,{" "}
+          <code className="text-slate-300">YOOKASSA_SECRET_KEY</code>,{" "}
+          <code className="text-slate-300">YOOKASSA_WEBHOOK_SECRET</code>.
+        </p>
       </section>
 
       <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5">

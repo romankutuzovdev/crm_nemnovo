@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from app.shared.base_schema import BaseSchema, UUIDSchema
@@ -43,3 +43,21 @@ class OnlinePaymentInitResponse(BaseSchema):
 class YookassaWebhookPayload(BaseSchema):
     event: str
     object: dict
+
+
+class InvoiceCreate(BaseSchema):
+    deal_id: UUID
+    amount: float
+    due_date: date
+    issuer_company_id: UUID | None = None
+
+
+class InvoiceResponse(UUIDSchema):
+    deal_id: UUID
+    issuer_company_id: UUID | None
+    issuer_company_name: str | None = None
+    amount: float
+    due_date: date
+    status: str
+    pdf_url: str | None
+    created_at: datetime

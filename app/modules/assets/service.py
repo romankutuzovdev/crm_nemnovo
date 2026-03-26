@@ -2,21 +2,61 @@ from datetime import datetime
 from uuid import UUID
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AssetConflictError, ConflictError, NotFoundError
-from app.modules.assets.models import Asset
-from app.modules.assets.repository import AssetRepository, AssetCategoryRepository
-from app.modules.assets.schemas import AssetCreate, AssetMaintenanceCreate, AssetUpdate
+from app.core.audit import write_audit_log
+from app.core.exceptions import AssetConflictError, ConflictError, NotFoundError, ValidationError
+from app.modules.assets.models import Asset, AssetMaintenance, Product, StockMovement
+from app.modules.assets.repository import AssetRepository, AssetCategoryRepository, ProductRepository, StockMovementRepository
+from app.modules.assets.schemas import (
+    AssetAuditEntryResponse,
+    AssetCreate,
+    AssetMaintenanceCreate,
+    AssetUpdate,
+    StockAdjustRequest,
+)
+from app.modules.users.models import AuditLog, User
+from app.shared.enums import AssetStatus, AuditAction
 
 logger = structlog.get_logger()
 
 
+def _asset_audit_snapshot(asset: Asset) -> dict:
+    return {
+        "name": asset.name,
+        "code": asset.code,
+        "capacity": asset.capacity,
+        "status": asset.status,
+        "description": asset.description,
+        "category_id": asset.category_id,
+        "meta": asset.meta,
+    }
+
+
 class AssetService:
+    ALLOWED_STATUS_TRANSITIONS: dict[AssetStatus, set[AssetStatus]] = {
+        AssetStatus.ACTIVE: {AssetStatus.MAINTENANCE, AssetStatus.RETIRED},
+        AssetStatus.MAINTENANCE: {AssetStatus.ACTIVE, AssetStatus.RETIRED},
+        AssetStatus.RETIRED: {AssetStatus.ACTIVE},
+    }
+
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.repo = AssetRepository(session)
         self.category_repo = AssetCategoryRepository(session)
+        self.product_repo = ProductRepository(session)
+        self.stock_movement_repo = StockMovementRepository(session)
+
+    def _validate_status_transition(self, current_status: str, next_status: str) -> None:
+        current = AssetStatus(current_status)
+        target = AssetStatus(next_status)
+        if current == target:
+            return
+        if target not in self.ALLOWED_STATUS_TRANSITIONS[current]:
+            raise ValidationError(
+                f"Недопустимый переход статуса актива: {current.value} -> {target.value}"
+            )
 
     async def create_asset(self, data: AssetCreate, created_by: UUID) -> Asset:
         if await self.repo.get_by_code(data.code):
@@ -26,11 +66,89 @@ class AssetService:
             raise NotFoundError(f"AssetCategory {data.category_id} not found")
         asset = await self.repo.create(**data.model_dump())
         logger.info("asset.created", asset_id=str(asset.id), code=asset.code)
-        return asset
+        await write_audit_log(
+            self.session,
+            created_by,
+            AuditAction.CREATE,
+            "assets",
+            asset.id,
+            after=_asset_audit_snapshot(asset),
+        )
+        await self.session.flush()
+        return await self.repo.get_with_category_or_raise(asset.id)
 
-    async def update_asset(self, asset_id: UUID, data: AssetUpdate) -> Asset:
+    async def get_asset(self, asset_id: UUID) -> Asset:
+        return await self.repo.get_with_category_or_raise(asset_id)
+
+    async def update_asset(self, asset_id: UUID, data: AssetUpdate, updated_by: UUID) -> Asset:
+        asset = await self.repo.get_with_category_or_raise(asset_id)
+        before = _asset_audit_snapshot(asset)
+        update_data = data.model_dump(exclude_none=True)
+        if "status" in update_data:
+            self._validate_status_transition(asset.status, str(update_data["status"]))
+        asset = await self.repo.update(asset_id, **update_data)
+        after = _asset_audit_snapshot(asset)
+        if before != after:
+            await write_audit_log(
+                self.session,
+                updated_by,
+                AuditAction.UPDATE,
+                "assets",
+                asset_id,
+                before=before,
+                after=after,
+            )
+            await self.session.flush()
+        return await self.repo.get_with_category_or_raise(asset_id)
+
+    async def transition_asset_status(
+        self, asset_id: UUID, status: AssetStatus, updated_by: UUID
+    ) -> Asset:
+        asset = await self.repo.get_with_category_or_raise(asset_id)
+        self._validate_status_transition(asset.status, status.value)
+        before = _asset_audit_snapshot(asset)
+        asset = await self.repo.update(asset_id, status=status.value)
+        await write_audit_log(
+            self.session,
+            updated_by,
+            AuditAction.UPDATE,
+            "assets",
+            asset_id,
+            before=before,
+            after=_asset_audit_snapshot(asset),
+        )
+        await self.session.flush()
+        return await self.repo.get_with_category_or_raise(asset_id)
+
+    async def list_asset_audit(self, asset_id: UUID, limit: int = 50) -> list[AssetAuditEntryResponse]:
         await self.repo.get_or_raise(asset_id)
-        return await self.repo.update(asset_id, **data.model_dump(exclude_none=True))
+        result = await self.session.execute(
+            select(AuditLog, User.full_name)
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .where(AuditLog.resource == "assets", AuditLog.resource_id == asset_id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )
+        rows: list[AssetAuditEntryResponse] = []
+        for log, full_name in result.all():
+            payload = log.after if log.after is not None else log.before
+            parts = [f"{k}: {v}" for k, v in (payload or {}).items()]
+            rows.append(
+                AssetAuditEntryResponse(
+                    id=log.id,
+                    action=log.action,
+                    user_name=full_name or "—",
+                    created_at=log.created_at,
+                    details="; ".join(parts) if parts else "—",
+                )
+            )
+        return rows
+
+    async def list_asset_maintenances(
+        self, asset_id: UUID, offset: int = 0, limit: int = 50
+    ) -> list[AssetMaintenance]:
+        await self.repo.get_or_raise(asset_id)
+        return await self.repo.list_maintenances_for_asset(asset_id, offset=offset, limit=limit)
 
     async def check_availability(
         self,
@@ -60,7 +178,6 @@ class AssetService:
             raise ConflictError(
                 f"Asset '{asset.name}' has bookings during maintenance period"
             )
-        from app.modules.assets.models import AssetMaintenance
         maintenance = AssetMaintenance(
             asset_id=data.asset_id,
             start_date=data.start_date,
@@ -70,4 +187,68 @@ class AssetService:
         )
         self.session.add(maintenance)
         await self.session.flush()
+        await write_audit_log(
+            self.session,
+            created_by,
+            AuditAction.UPDATE,
+            "assets",
+            data.asset_id,
+            after={
+                "maintenance_id": str(maintenance.id),
+                "start_date": data.start_date.isoformat(),
+                "end_date": data.end_date.isoformat(),
+                "reason": data.reason,
+            },
+        )
+        await self.session.flush()
         return maintenance
+
+    async def adjust_product_stock(
+        self,
+        product_id: UUID,
+        data: StockAdjustRequest,
+        updated_by: UUID,
+    ) -> StockMovement:
+        if data.delta_qty == 0:
+            raise ValidationError("Delta quantity must be non-zero")
+
+        async with self.session.begin():
+            product = await self.product_repo.get_or_raise(product_id)
+
+            new_qty = int(product.stock_quantity) + int(data.delta_qty)
+            if new_qty < 0:
+                raise ValidationError(
+                    f"Insufficient stock for product {product.sku}: current={product.stock_quantity}, delta={data.delta_qty}"
+                )
+
+            movement = StockMovement(
+                product_id=product_id,
+                delta_qty=data.delta_qty,
+                new_quantity=new_qty,
+                reason=data.reason,
+                created_by=updated_by,
+            )
+            self.session.add(movement)
+            await self.session.flush()
+
+            product.stock_quantity = new_qty
+
+            await write_audit_log(
+                self.session,
+                updated_by,
+                AuditAction.UPDATE,
+                "products",
+                product_id,
+                after={"stock_quantity": new_qty, "delta_qty": data.delta_qty, "reason": data.reason},
+            )
+
+        return movement
+
+    async def list_product_movements(
+        self,
+        product_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[StockMovement]:
+        await self.product_repo.get_or_raise(product_id)
+        return await self.stock_movement_repo.list_by_product(product_id, offset=offset, limit=limit)

@@ -1,53 +1,76 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.pyo
 *.pyd
 .Python
 *.egg
 *.egg-info/
+.eggs/
 dist/
 build/
-.eggs/
+pip-wheel-metadata/
 
 # Virtual environments
 .venv/
+.venv*/
 venv/
 env/
+ENV/
 
-# Environment variables
+# Environment (не коммитить секреты)
 .env
 .env.local
 .env.*.local
 
-# IDE
+# IDE / редакторы
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
-# Testing
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing / покрытие
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
 .tox/
+.nox/
 
-# Docker
+# Линтеры / типы
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# Docker (локальные артефакты)
 .docker/
 
-# Logs
+# Логи
 *.log
 logs/
 
-# Alembic
-app/db/migrations/alembic/versions/*.py
-!app/db/migrations/alembic/versions/.gitkeep
-
-# mypy
-.mypy_cache/
-
-# ruff
-.ruff_cache/
-
-# SQLite
+# Базы SQLite (локальные данные)
 *.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Frontend (Next.js) — дублируем на корне на случай общих команд из корня
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# Claude Code — только локальные настройки машины
+.claude/settings.local.json

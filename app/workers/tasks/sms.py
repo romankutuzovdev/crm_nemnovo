@@ -14,6 +14,7 @@ SMS_API_URL = "https://sms.ru/sms/send"
 def send_sms_task(self: Task, log_id: str, phone: str, template_code: str, context: dict) -> dict:
     """Send SMS and update notification log status."""
     from jinja2 import Template
+    import asyncio
 
     # Template registry (in production — load from DB or file)
     TEMPLATES = {
@@ -23,7 +24,28 @@ def send_sms_task(self: Task, log_id: str, phone: str, template_code: str, conte
         "deal_reminder": "Напоминание: заказ {{ deal_number }} начинается {{ date }}.",
     }
 
-    template_str = TEMPLATES.get(template_code, "{{ message }}")
+    template_str = TEMPLATES.get(template_code)
+    if template_str is None:
+        # Allow custom templates stored in DB
+        async def _fetch_template() -> str | None:
+            from sqlalchemy import select
+            from app.db.session import AsyncSessionLocal
+            from app.modules.notifications.models import NotificationTemplate
+
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(NotificationTemplate).where(NotificationTemplate.code == template_code)
+                )
+                tpl = result.scalar_one_or_none()
+                return tpl.body_template if tpl else None
+
+        try:
+            template_str = asyncio.get_event_loop().run_until_complete(_fetch_template())
+        except RuntimeError:
+            template_str = asyncio.run(_fetch_template())
+
+    if template_str is None:
+        template_str = "{{ message }}"
     text = Template(template_str).render(**context)
 
     try:

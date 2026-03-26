@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from app.modules.payments.models import Invoice, Payment
 from app.modules.deals.models import Deal
@@ -45,3 +46,12 @@ class PaymentRepository(BaseRepository[Payment]):
 
 class InvoiceRepository(BaseRepository[Invoice]):
     model = Invoice
+
+    async def list_by_deal(self, deal_id: UUID) -> list[Invoice]:
+        result = await self.session.execute(
+            select(Invoice)
+            .options(selectinload(Invoice.issuer_company))
+            .where(Invoice.deal_id == deal_id)
+            .order_by(Invoice.created_at.desc())
+        )
+        return list(result.scalars().all())

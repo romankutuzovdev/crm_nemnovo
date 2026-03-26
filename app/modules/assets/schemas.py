@@ -34,6 +34,27 @@ class AssetResponse(UUIDSchema):
     capacity: int
     status: str
     description: str | None
+    meta: dict | None = None
+
+
+class AssetAuditEntryResponse(UUIDSchema):
+    action: str
+    user_name: str
+    created_at: datetime
+    details: str
+
+
+class AssetStatusPatch(BaseSchema):
+    status: AssetStatus
+
+
+class AssetMaintenanceResponse(UUIDSchema):
+    asset_id: UUID
+    start_date: date
+    end_date: date
+    reason: str | None
+    created_by: UUID
+    created_at: datetime
 
 
 class AssetMaintenanceCreate(BaseSchema):
@@ -67,3 +88,17 @@ class ProductResponse(UUIDSchema):
     price: float
     stock_quantity: int
     is_rentable: bool
+
+
+class StockAdjustRequest(BaseSchema):
+    delta_qty: int
+    reason: str | None = None
+
+
+class StockMovementResponse(UUIDSchema):
+    product_id: UUID
+    delta_qty: int
+    new_quantity: int
+    reason: str | None
+    created_by: UUID
+    created_at: datetime

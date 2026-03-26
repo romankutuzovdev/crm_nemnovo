@@ -18,12 +18,45 @@ logger = structlog.get_logger()
 
 
 class DealService:
+    ALLOWED_STATUS_TRANSITIONS: dict[DealStatus, set[DealStatus]] = {
+        DealStatus.NEW: {DealStatus.CONFIRMED, DealStatus.CANCELLED},
+        DealStatus.CONFIRMED: {DealStatus.IN_PROGRESS, DealStatus.CANCELLED},
+        DealStatus.IN_PROGRESS: {DealStatus.COMPLETED, DealStatus.CANCELLED},
+        DealStatus.COMPLETED: set(),
+        DealStatus.CANCELLED: set(),
+    }
+
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.repo = DealRepository(session)
         self.item_repo = DealItemRepository(session)
         self.asset_repo = AssetRepository(session)
         self.client_repo = ClientRepository(session)
+
+    def _validate_status_transition(self, current_status: str, next_status: str) -> None:
+        current = DealStatus(current_status)
+        target = DealStatus(next_status)
+        if current == target:
+            return
+        if target not in self.ALLOWED_STATUS_TRANSITIONS[current]:
+            raise ValidationError(
+                f"Недопустимый переход статуса: {current.value} -> {target.value}"
+            )
+
+    async def transition_status(self, deal_id: UUID, status: DealStatus, updated_by: UUID) -> Deal:
+        deal = await self.repo.get_or_raise(deal_id)
+        self._validate_status_transition(deal.status, status.value)
+        async with self.session.begin():
+            deal = await self.repo.update(deal_id, status=status)
+            await write_audit_log(
+                self.session,
+                updated_by,
+                AuditAction.UPDATE,
+                "deals",
+                deal_id,
+                after={"status": status.value},
+            )
+        return deal
 
     async def create_deal(self, data: DealCreate, created_by: UUID) -> Deal:
         # Validate client exists
@@ -118,6 +151,8 @@ class DealService:
             raise ValidationError("Дата окончания не может быть раньше даты начала")
         if "guests_count" in update_data and update_data["guests_count"] < 1:
             raise ValidationError("Число гостей должно быть не меньше 1")
+        if "status" in update_data:
+            self._validate_status_transition(deal.status, str(update_data["status"]))
 
         async with self.session.begin():
             deal = await self.repo.update(deal_id, **update_data)

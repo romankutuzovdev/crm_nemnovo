@@ -154,6 +154,10 @@ class ClientService:
                 status=l.status,
                 source_ref=l.source_ref,
                 comment=l.comment,
+                recording_url=(
+                    (l.raw_payload or {}).get("recording_url")
+                    or (l.raw_payload or {}).get("recording")
+                ),
                 converted_deal_id=l.converted_deal_id,
             )
             for l in leads

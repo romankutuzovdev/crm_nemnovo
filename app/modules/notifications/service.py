@@ -17,7 +17,7 @@ class NotificationService:
         phone: str,
         template_code: str,
         context: dict,
-    ) -> None:
+    ):
         """Enqueue SMS via Celery task."""
         from app.workers.tasks.sms import send_sms_task
 
@@ -33,6 +33,7 @@ class NotificationService:
 
         send_sms_task.delay(str(log.id), phone, template_code, context)
         logger.info("notification.queued", channel="sms", phone=phone[:7] + "***")
+        return log.id
 
     async def notify_managers_new_lead(self, lead_id: str) -> None:
         """Notify all active managers about a new lead."""

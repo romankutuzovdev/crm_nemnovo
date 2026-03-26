@@ -7,9 +7,10 @@ from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.bookings.schemas import BookingCreate, BookingResponse, BookingUpdate
 from app.modules.bookings.service import BookingService
-from app.modules.orders.schemas import OrderCreate, OrderResponse, OrderUpdate
+from app.modules.orders.schemas import OrderAuditEntryResponse, OrderCreate, OrderResponse, OrderUpdate
 from app.modules.orders.service import OrderService
 from app.shared.base_schema import PaginatedResponse
+from app.shared.enums import DealStatus
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -56,6 +57,17 @@ async def get_order(
     return await service.get_order(order_id)
 
 
+@router.get("/{order_id}/audit", response_model=list[OrderAuditEntryResponse])
+async def list_order_audit(
+    order_id: UUID,
+    limit: int = Query(50, ge=1, le=200),
+    current_user=require_permission("orders", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = OrderService(db)
+    return await service.list_order_audit(order_id, limit=limit)
+
+
 @router.post("/", response_model=OrderResponse, status_code=201)
 async def create_order(
     data: OrderCreate,
@@ -85,6 +97,17 @@ async def cancel_order(
 ):
     service = OrderService(db)
     return await service.cancel_order(order_id, cancelled_by=current_user.id)
+
+
+@router.post("/{order_id}/status", response_model=OrderResponse)
+async def transition_order_status(
+    order_id: UUID,
+    status: DealStatus = Query(..., description="Новый статус заказа"),
+    current_user=require_permission("orders", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = OrderService(db)
+    return await service.transition_status(order_id, status=status, updated_by=current_user.id)
 
 
 # Bookings inside order

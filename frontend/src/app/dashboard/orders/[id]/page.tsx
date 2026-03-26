@@ -14,7 +14,7 @@ function toDatetimeLocalValue(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-type Tab = "details" | "items" | "bookings" | "payments";
+type Tab = "details" | "items" | "bookings" | "payments" | "history";
 
 interface OrderItem {
   id: string;
@@ -64,6 +64,37 @@ interface Payment {
   notes: string | null;
 }
 
+interface OrderAuditEntry {
+  id: string;
+  action: string;
+  user_name: string;
+  created_at: string;
+  details: string;
+}
+
+interface Invoice {
+  id: string;
+  deal_id: string;
+  issuer_company_id: string | null;
+  issuer_company_name: string | null;
+  amount: number;
+  due_date: string;
+  status: string;
+  pdf_url: string | null;
+  created_at: string;
+}
+
+interface CompanyRow {
+  id: string;
+  name: string;
+}
+
+interface OnlinePaymentInitResponse {
+  payment_id: string;
+  payment_url: string;
+  external_id: string;
+}
+
 interface ClientBrief {
   id: string;
   first_name: string;
@@ -84,6 +115,14 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   cancelled: "Отменён",
 };
 
+const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
+  new: ["confirmed", "cancelled"],
+  confirmed: ["in_progress", "cancelled"],
+  in_progress: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
+
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   unpaid: "Не оплачен",
   partial: "Частично",
@@ -91,11 +130,31 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   overpaid: "Переплата",
 };
 
+const PAYMENT_TX_STATUS_LABELS: Record<string, string> = {
+  pending: "В ожидании",
+  confirmed: "Подтвержден",
+  failed: "Ошибка",
+  refunded: "Возврат",
+};
+
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: "Наличные",
   card: "Карта",
   transfer: "Перевод",
   online: "Онлайн",
+};
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  CREATE: "Создание",
+  UPDATE: "Изменение",
+  DELETE: "Удаление",
+};
+
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  draft: "Черновик",
+  sent: "Отправлен",
+  paid: "Оплачен",
+  overdue: "Просрочен",
 };
 
 const SERVICE_TYPE_LABELS: Record<string, string> = {
@@ -134,6 +193,9 @@ export default function OrderDetailsPage() {
   const [paymentAmount, setPaymentAmount] = useState("100");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [invoiceAmount, setInvoiceAmount] = useState("0");
+  const [invoiceDueDate, setInvoiceDueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [invoiceIssuerCompanyId, setInvoiceIssuerCompanyId] = useState("");
 
   const { data: order, isLoading, error, refetch } = useQuery({
     queryKey: ["order", orderId],
@@ -159,6 +221,18 @@ export default function OrderDetailsPage() {
     enabled: !!token && !!orderId,
   });
 
+  const { data: invoices, refetch: refetchInvoices } = useQuery({
+    queryKey: ["invoices", orderId],
+    queryFn: () => apiFetch<Invoice[]>(`/payments/order/${orderId}/invoices`, { token }),
+    enabled: !!token && !!orderId,
+  });
+
+  const { data: companies } = useQuery({
+    queryKey: ["invoice-companies"],
+    queryFn: () => apiFetch<{ items: CompanyRow[] }>("/companies/?limit=200", { token }),
+    enabled: !!token,
+  });
+
   const { data: assets } = useQuery({
     queryKey: ["assets"],
     queryFn: () =>
@@ -171,6 +245,12 @@ export default function OrderDetailsPage() {
         }>
       >("/assets/", { token }),
     enabled: !!token,
+  });
+
+  const { data: auditTrail } = useQuery({
+    queryKey: ["order-audit", orderId],
+    queryFn: () => apiFetch<OrderAuditEntry[]>(`/orders/${orderId}/audit`, { token }),
+    enabled: !!token && !!orderId,
   });
 
   const { data: availableAssets, isFetching: availableLoading } = useQuery({
@@ -217,6 +297,53 @@ export default function OrderDetailsPage() {
     onSuccess: async () => {
       setPaymentNotes("");
       await Promise.all([refetchPayments(), refetch()]);
+    },
+  });
+
+  const initOnlinePayment = useMutation({
+    mutationFn: () =>
+      apiFetch<OnlinePaymentInitResponse>("/payments/online/init", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          deal_id: orderId,
+          amount: Number(paymentAmount),
+          return_url: `${window.location.origin}/dashboard/orders/${orderId}`,
+        }),
+      }),
+    onSuccess: (data) => {
+      window.open(data.payment_url, "_blank", "noopener,noreferrer");
+      refetchPayments();
+    },
+  });
+
+  const refundPayment = useMutation({
+    mutationFn: (paymentId: string) =>
+      apiFetch<Payment>(`/payments/${paymentId}/refund`, {
+        method: "POST",
+        token,
+      }),
+    onSuccess: async () => {
+      await Promise.all([refetchPayments(), refetch()]);
+    },
+  });
+
+  const createInvoice = useMutation({
+    mutationFn: () =>
+      apiFetch<Invoice>("/payments/invoices", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          deal_id: orderId,
+          amount: Number(invoiceAmount),
+          due_date: invoiceDueDate,
+          issuer_company_id: invoiceIssuerCompanyId || null,
+        }),
+      }),
+    onSuccess: async () => {
+      await refetchInvoices();
+      setInvoiceAmount("0");
+      setInvoiceIssuerCompanyId("");
     },
   });
 
@@ -278,7 +405,6 @@ export default function OrderDetailsPage() {
         method: "PATCH",
         token,
         body: JSON.stringify({
-          status: editStatus || undefined,
           notes: editNotes || null,
           assigned_to: editAssignedTo === "" ? null : editAssignedTo,
           start_date: editStartDate || undefined,
@@ -288,6 +414,17 @@ export default function OrderDetailsPage() {
       }),
     onSuccess: async () => {
       setIsEditing(false);
+      await refetch();
+    },
+  });
+
+  const transitionStatus = useMutation({
+    mutationFn: (nextStatus: string) =>
+      apiFetch<Order>(
+        `/orders/${orderId}/status?status=${encodeURIComponent(nextStatus)}`,
+        { method: "POST", token }
+      ),
+    onSuccess: async () => {
       await refetch();
     },
   });
@@ -316,6 +453,11 @@ export default function OrderDetailsPage() {
     };
   }, [order]);
 
+  const allowedStatuses = useMemo(() => {
+    if (!order) return [] as string[];
+    return ALLOWED_STATUS_TRANSITIONS[order.status] ?? [];
+  }, [order]);
+
   if (isLoading) return <div className="text-slate-500">Загрузка...</div>;
   if (error) {
     return (
@@ -337,7 +479,7 @@ export default function OrderDetailsPage() {
                 onClick={() => {
                   if (!isEditing) {
                     setEditNotes(order.notes ?? "");
-                    setEditStatus(order.status ?? "");
+                    setEditStatus((ALLOWED_STATUS_TRANSITIONS[order.status] ?? [])[0] ?? "");
                     setEditAssignedTo(order.assigned_to ?? "");
                     setEditStartDate(order.start_date?.slice(0, 10) ?? "");
                     setEditEndDate(order.end_date?.slice(0, 10) ?? "");
@@ -409,6 +551,7 @@ export default function OrderDetailsPage() {
             ["items", "Позиции"],
             ["bookings", "Бронирования"],
             ["payments", "Оплаты"],
+            ["history", "История"],
           ] as Array<[Tab, string]>
         ).map(([key, label]) => (
           <button
@@ -439,9 +582,12 @@ export default function OrderDetailsPage() {
                 onChange={(e) => setEditStatus(e.target.value)}
                 className="ml-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
               >
-                {Object.entries(ORDER_STATUS_LABELS).map(([val, label]) => (
+                {allowedStatuses.length === 0 && (
+                  <option value="">Нет доступных переходов</option>
+                )}
+                {allowedStatuses.map((val) => (
                   <option key={val} value={val}>
-                    {label}
+                    {ORDER_STATUS_LABELS[val] ?? val}
                   </option>
                 ))}
               </select>
@@ -533,14 +679,20 @@ export default function OrderDetailsPage() {
           {isEditing && (
             <div className="md:col-span-2 flex gap-2">
               <button
-                onClick={() => updateOrder.mutate()}
+                onClick={async () => {
+                  if (editStatus) {
+                    await transitionStatus.mutateAsync(editStatus);
+                  }
+                  updateOrder.mutate();
+                }}
                 disabled={
                   updateOrder.isPending ||
+                  transitionStatus.isPending ||
                   !!(editStartDate && editEndDate && editEndDate < editStartDate)
                 }
                 className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
               >
-                {updateOrder.isPending ? "Сохранение..." : "Сохранить"}
+                {updateOrder.isPending || transitionStatus.isPending ? "Сохранение..." : "Сохранить"}
               </button>
               <button
                 onClick={() => setIsEditing(false)}
@@ -548,9 +700,14 @@ export default function OrderDetailsPage() {
               >
                 Отмена
               </button>
-              {updateOrder.isError && (
+              {(updateOrder.isError || transitionStatus.isError) && (
                 <div className="text-red-400 text-sm self-center">
-                  Ошибка: {updateOrder.error instanceof Error ? updateOrder.error.message : "Неизвестная ошибка"}
+                  Ошибка:{" "}
+                  {updateOrder.error instanceof Error
+                    ? updateOrder.error.message
+                    : transitionStatus.error instanceof Error
+                      ? transitionStatus.error.message
+                      : "Неизвестная ошибка"}
                 </div>
               )}
             </div>
@@ -815,6 +972,88 @@ export default function OrderDetailsPage() {
       {tab === "payments" && (
         <div className="space-y-4">
           <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
+            <h3 className="font-medium mb-3">Счета</h3>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Сумма</label>
+                <input
+                  value={invoiceAmount}
+                  onChange={(e) => setInvoiceAmount(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  inputMode="decimal"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Срок оплаты</label>
+                <input
+                  type="date"
+                  value={invoiceDueDate}
+                  onChange={(e) => setInvoiceDueDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm text-slate-400 mb-1">Эмитент счета (компания)</label>
+                <select
+                  value={invoiceIssuerCompanyId}
+                  onChange={(e) => setInvoiceIssuerCompanyId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                >
+                  <option value="">Не выбран</option>
+                  {(companies?.items ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3">
+              <button
+                onClick={() => createInvoice.mutate()}
+                disabled={createInvoice.isPending || Number(invoiceAmount) <= 0}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {createInvoice.isPending ? "Создание..." : "Создать счет"}
+              </button>
+            </div>
+            {createInvoice.isError && (
+              <div className="text-red-400 text-sm mt-2">
+                Ошибка счета: {createInvoice.error instanceof Error ? createInvoice.error.message : "Неизвестная ошибка"}
+              </div>
+            )}
+            <div className="mt-4 rounded-lg border border-slate-700 overflow-hidden">
+              <table className="w-full">
+                <thead className="bg-slate-800/50">
+                  <tr>
+                    <th className="text-left p-3">Дата</th>
+                    <th className="text-left p-3">Эмитент</th>
+                    <th className="text-left p-3">Сумма</th>
+                    <th className="text-left p-3">Срок</th>
+                    <th className="text-left p-3">Статус</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(invoices ?? []).map((i) => (
+                    <tr key={i.id} className="border-t border-slate-700">
+                      <td className="p-3">{new Date(i.created_at).toLocaleString("ru")}</td>
+                      <td className="p-3">{i.issuer_company_name ?? "—"}</td>
+                      <td className="p-3">{Number(i.amount).toLocaleString("ru")} ₽</td>
+                      <td className="p-3">{i.due_date}</td>
+                      <td className="p-3">{INVOICE_STATUS_LABELS[i.status] ?? i.status}</td>
+                    </tr>
+                  ))}
+                  {(!invoices || invoices.length === 0) && (
+                    <tr className="border-t border-slate-700">
+                      <td className="p-3 text-slate-500" colSpan={5}>Счетов пока нет</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
             <div className="grid gap-3 md:grid-cols-4">
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Сумма</label>
@@ -849,13 +1088,28 @@ export default function OrderDetailsPage() {
               </div>
             </div>
             <div className="mt-3">
-              <button
-                onClick={() => createPayment.mutate()}
-                disabled={createPayment.isPending}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
-              >
-                {createPayment.isPending ? "Сохранение..." : "Добавить платеж"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => createPayment.mutate()}
+                  disabled={createPayment.isPending}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {createPayment.isPending ? "Сохранение..." : "Добавить платеж"}
+                </button>
+                <button
+                  onClick={() => initOnlinePayment.mutate()}
+                  disabled={initOnlinePayment.isPending || Number(paymentAmount) <= 0}
+                  className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50"
+                >
+                  {initOnlinePayment.isPending ? "Создание..." : "Оплатить онлайн"}
+                </button>
+              </div>
+              {initOnlinePayment.isError && (
+                <div className="text-red-400 text-sm mt-2">
+                  Ошибка онлайн-оплаты:{" "}
+                  {initOnlinePayment.error instanceof Error ? initOnlinePayment.error.message : "Неизвестная ошибка"}
+                </div>
+              )}
             </div>
           </div>
 
@@ -868,6 +1122,7 @@ export default function OrderDetailsPage() {
                   <th className="text-left p-4">Способ</th>
                   <th className="text-left p-4">Статус</th>
                   <th className="text-left p-4">Комментарий</th>
+                  <th className="text-left p-4">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -878,18 +1133,64 @@ export default function OrderDetailsPage() {
                     </td>
                     <td className="p-4">{Number(p.amount).toLocaleString("ru")} ₽</td>
                     <td className="p-4">{PAYMENT_METHOD_LABELS[p.method] ?? p.method}</td>
-                    <td className="p-4">{PAYMENT_STATUS_LABELS[p.status] ?? p.status}</td>
+                    <td className="p-4">{PAYMENT_TX_STATUS_LABELS[p.status] ?? p.status}</td>
                     <td className="p-4">{p.notes ?? "—"}</td>
+                    <td className="p-4">
+                      <button
+                        onClick={() => {
+                          if (confirm("Оформить возврат этого платежа?")) refundPayment.mutate(p.id);
+                        }}
+                        disabled={refundPayment.isPending || p.status !== "confirmed"}
+                        className="px-3 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-500 disabled:opacity-50 text-sm"
+                      >
+                        {refundPayment.isPending ? "..." : "Возврат"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {(!payments || payments.length === 0) && (
                   <tr className="border-t border-slate-700">
-                    <td className="p-4 text-slate-500" colSpan={5}>Платежей нет</td>
+                    <td className="p-4 text-slate-500" colSpan={6}>Платежей нет</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+          {refundPayment.isError && (
+            <div className="text-red-400 text-sm">
+              Ошибка возврата: {refundPayment.error instanceof Error ? refundPayment.error.message : "Неизвестная ошибка"}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "history" && (
+        <div className="rounded-xl border border-slate-700 overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-800/50">
+              <tr>
+                <th className="text-left p-4">Когда</th>
+                <th className="text-left p-4">Действие</th>
+                <th className="text-left p-4">Пользователь</th>
+                <th className="text-left p-4">Детали</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(auditTrail ?? []).map((a) => (
+                <tr key={a.id} className="border-t border-slate-700">
+                  <td className="p-4 text-slate-300">{new Date(a.created_at).toLocaleString("ru")}</td>
+                  <td className="p-4">{AUDIT_ACTION_LABELS[a.action] ?? a.action}</td>
+                  <td className="p-4 text-slate-300">{a.user_name}</td>
+                  <td className="p-4 text-sm text-slate-300">{a.details}</td>
+                </tr>
+              ))}
+              {(!auditTrail || auditTrail.length === 0) && (
+                <tr className="border-t border-slate-700">
+                  <td className="p-4 text-slate-500" colSpan={4}>История изменений пуста</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

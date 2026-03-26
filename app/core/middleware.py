@@ -22,7 +22,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             ip=request.client.host if request.client else "unknown",
         )
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            # Keep request context (request_id, method, path) for exception logs
+            logger.exception(
+                "http.request_error",
+                error=str(exc),
+            )
+            raise
         duration_ms = round((time.monotonic() - start_time) * 1000, 2)
 
         logger.info(

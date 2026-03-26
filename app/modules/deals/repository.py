@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Any
+from typing import Any, List
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -18,7 +18,7 @@ class DealRepository(BaseRepository[Deal]):
         filters: dict[str, Any] | None = None,
         offset: int = 0,
         limit: int = 50,
-    ) -> list[Deal]:
+    ) -> List[Deal]:
         stmt = (
             select(Deal)
             .options(
@@ -59,7 +59,7 @@ class DealRepository(BaseRepository[Deal]):
         result = await self.session.execute(select(Deal).where(Deal.number == number))
         return result.scalar_one_or_none()
 
-    async def list_by_client(self, client_id: UUID, offset: int = 0, limit: int = 50) -> list[Deal]:
+    async def list_by_client(self, client_id: UUID, offset: int = 0, limit: int = 50) -> List[Deal]:
         result = await self.session.execute(
             select(Deal)
             .options(
@@ -72,7 +72,7 @@ class DealRepository(BaseRepository[Deal]):
         )
         return list(result.scalars().all())
 
-    async def list_by_manager(self, manager_id: UUID, offset: int = 0, limit: int = 50) -> list[Deal]:
+    async def list_by_manager(self, manager_id: UUID, offset: int = 0, limit: int = 50) -> List[Deal]:
         result = await self.session.execute(
             select(Deal)
             .options(

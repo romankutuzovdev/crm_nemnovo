@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
+import redis.exceptions
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import UnauthorizedError
 from app.core.security import (
     create_access_token,
@@ -66,7 +68,15 @@ class AuthService:
             jti = payload.get("jti", token[-16:])
             exp = payload.get("exp", 0)
             ttl = max(0, int(exp - datetime.now(timezone.utc).timestamp()))
-            await redis.setex(f"token:blacklist:{jti}", ttl, "1")
+            try:
+                await redis.setex(f"token:blacklist:{jti}", ttl, "1")
+            except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+                if settings.is_production:
+                    raise
+                logger.warning(
+                    "redis.unavailable_logout_no_blacklist",
+                    error=str(e),
+                )
         except ValueError:
             pass  # Token already invalid — nothing to blacklist
         logger.info("auth.logout")

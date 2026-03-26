@@ -1,10 +1,17 @@
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import ForbiddenError
+from app.core.permissions import require_permission
 from app.core.security import verify_hmac_signature
 from app.db.session import get_db
+from app.modules.integrations.models import IntegrationConfig, WebhookLog
+from app.modules.integrations.schemas import (
+    IntegrationConfigResponse,
+    IntegrationConfigUpsert,
+    WebhookLogResponse,
+)
 from app.modules.integrations.service import IntegrationService
 
 router = APIRouter(prefix="/webhooks", tags=["integrations"])
@@ -54,3 +61,80 @@ async def telephony_webhook(
     async with db.begin():
         service = IntegrationService(db)
         return await service.handle_telephony_event(payload, ip_address=ip)
+
+
+@router.get("/logs", response_model=list[WebhookLogResponse])
+async def list_webhook_logs(
+    source: str | None = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    current_user=require_permission("integrations", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    stmt = select(WebhookLog).order_by(WebhookLog.created_at.desc())
+    if source:
+        stmt = stmt.where(WebhookLog.source == source)
+    result = await db.execute(stmt.offset(offset).limit(limit))
+    logs = result.scalars().all()
+    return [
+        WebhookLogResponse(
+            id=l.id,
+            source=l.source,
+            is_processed=l.is_processed,
+            error=l.error,
+            ip_address=l.ip_address,
+            created_at=l.created_at,
+        )
+        for l in logs
+    ]
+
+
+@router.get("/configs", response_model=list[IntegrationConfigResponse])
+async def list_integration_configs(
+    current_user=require_permission("integrations", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    result = await db.execute(select(IntegrationConfig).order_by(IntegrationConfig.name))
+    rows = result.scalars().all()
+    return [
+        IntegrationConfigResponse(
+            id=r.id,
+            name=r.name,
+            is_enabled=r.is_enabled,
+            config=r.config,
+            updated_at=r.updated_at,
+        )
+        for r in rows
+    ]
+
+
+@router.post("/configs", response_model=IntegrationConfigResponse)
+async def upsert_integration_config(
+    data: IntegrationConfigUpsert,
+    current_user=require_permission("integrations", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import select
+
+    result = await db.execute(select(IntegrationConfig).where(IntegrationConfig.name == data.name))
+    row = result.scalar_one_or_none()
+    if row is None:
+        row = IntegrationConfig(name=data.name, is_enabled=data.is_enabled, config=data.config)
+        db.add(row)
+        await db.flush()
+    else:
+        row.is_enabled = data.is_enabled
+        row.config = data.config
+        await db.flush()
+    await db.refresh(row)
+    return IntegrationConfigResponse(
+        id=row.id,
+        name=row.name,
+        is_enabled=row.is_enabled,
+        config=row.config,
+        updated_at=row.updated_at,
+    )

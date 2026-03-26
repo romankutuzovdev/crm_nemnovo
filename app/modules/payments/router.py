@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -9,9 +9,12 @@ from app.core.permissions import require_permission
 from app.core.security import verify_hmac_signature
 from app.db.session import get_db
 from app.modules.payments.schemas import (
+    InvoiceCreate,
+    InvoiceResponse,
+    OnlinePaymentInitRequest,
+    OnlinePaymentInitResponse,
     PaymentCreate,
     PaymentResponse,
-    YookassaWebhookPayload,
 )
 from app.modules.payments.service import PaymentService
 
@@ -69,6 +72,55 @@ async def refund_payment(
     return await service.refund_payment(payment_id, refunded_by=current_user.id)
 
 
+@router.get("/order/{order_id}/invoices", response_model=list[InvoiceResponse])
+async def list_order_invoices(
+    order_id: UUID,
+    current_user=require_permission("payments", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PaymentService(db)
+    invoices = await service.list_invoices_by_deal(order_id)
+    return [
+        InvoiceResponse(
+            id=i.id,
+            deal_id=i.deal_id,
+            issuer_company_id=i.issuer_company_id,
+            issuer_company_name=i.issuer_company.name if i.issuer_company else None,
+            amount=i.amount,
+            due_date=i.due_date,
+            status=i.status,
+            pdf_url=i.pdf_url,
+            created_at=i.created_at,
+        )
+        for i in invoices
+    ]
+
+
+@router.post("/invoices", response_model=InvoiceResponse, status_code=201)
+async def create_invoice(
+    data: InvoiceCreate,
+    current_user=require_permission("payments", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PaymentService(db)
+    i = await service.create_invoice(data, created_by=current_user.id)
+    issuer_name = None
+    if i.issuer_company_id:
+        issuer = await service.company_repo.get_or_raise(i.issuer_company_id)
+        issuer_name = issuer.name
+    return InvoiceResponse(
+        id=i.id,
+        deal_id=i.deal_id,
+        issuer_company_id=i.issuer_company_id,
+        issuer_company_name=issuer_name,
+        amount=i.amount,
+        due_date=i.due_date,
+        status=i.status,
+        pdf_url=i.pdf_url,
+        created_at=i.created_at,
+    )
+
+
 @router.post("/webhook/yookassa", include_in_schema=False)
 async def yookassa_webhook(
     request: Request,
@@ -90,3 +142,13 @@ async def yookassa_webhook(
         await service.confirm_online_payment(external_id)
 
     return {"status": "ok"}
+
+
+@router.post("/online/init", response_model=OnlinePaymentInitResponse)
+async def init_online_payment(
+    data: OnlinePaymentInitRequest,
+    current_user=require_permission("payments", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PaymentService(db)
+    return await service.init_online_payment(data, created_by=current_user.id)

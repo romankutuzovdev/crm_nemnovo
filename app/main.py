@@ -43,7 +43,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_HOSTS,
-    allow_credentials=True,
+    # Когда allow_origins="*" — allow_credentials=true нарушает спецификацию CORS и часто
+    # приводит к блокировкам браузером.
+    allow_credentials="*" not in settings.ALLOWED_HOSTS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

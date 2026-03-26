@@ -10,6 +10,12 @@ from app.shared.enums import LeadStatus
 class LeadRepository(BaseRepository[Lead]):
     model = Lead
 
+    async def find_by_source_ref(self, source: str, source_ref: str) -> Lead | None:
+        result = await self.session.execute(
+            select(Lead).where(Lead.source == source, Lead.source_ref == source_ref)
+        )
+        return result.scalar_one_or_none()
+
     async def count_open_leads_for_manager(self, manager_id: UUID) -> int:
         """Заявки в работе у менеджера: new / in_progress."""
         result = await self.session.execute(

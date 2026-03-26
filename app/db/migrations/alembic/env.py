@@ -17,6 +17,9 @@ import app.modules.bookings.models  # noqa
 import app.modules.payments.models  # noqa
 import app.modules.notifications.models  # noqa
 import app.modules.integrations.models  # noqa
+import app.modules.rafting.models  # noqa
+import app.modules.hostel.models  # noqa
+import app.modules.rent.models  # noqa
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

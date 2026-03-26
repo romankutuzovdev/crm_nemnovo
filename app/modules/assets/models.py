@@ -77,8 +77,30 @@ class Product(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+    stock_movements: Mapped[list["StockMovement"]] = relationship(
+        "StockMovement", back_populates="product", cascade="all, delete-orphan"
+    )
+
     def __repr__(self) -> str:
         return f"<Product {self.sku} ({self.name})>"
+
+
+class StockMovement(Base):
+    __tablename__ = "stock_movements"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    delta_qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    product: Mapped["Product"] = relationship("Product", back_populates="stock_movements")
 
 
 # Import here to avoid circular imports

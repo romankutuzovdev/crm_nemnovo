@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.modules.leads.schemas import (
     AssignableUserResponse,
     LeadAttachClient,
+    LeadAuditEntryResponse,
     LeadCreate,
     LeadResponse,
     LeadUpdate,
@@ -58,7 +59,26 @@ async def get_lead(
     db: AsyncSession = Depends(get_db),
 ):
     service = LeadService(db)
-    return await service.repo.get_or_raise(lead_id)
+    lead = await service.repo.get_or_raise(lead_id)
+    if current_user.role.name == "manager" and lead.assigned_to != current_user.id:
+        from app.core.exceptions import ForbiddenError
+        raise ForbiddenError("Access denied")
+    return lead
+
+
+@router.get("/{lead_id}/audit", response_model=list[LeadAuditEntryResponse])
+async def list_lead_audit(
+    lead_id: UUID,
+    limit: int = Query(50, ge=1, le=200),
+    current_user=require_permission("leads", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = LeadService(db)
+    lead = await service.repo.get_or_raise(lead_id)
+    if current_user.role.name == "manager" and lead.assigned_to != current_user.id:
+        from app.core.exceptions import ForbiddenError
+        raise ForbiddenError("Access denied")
+    return await service.list_lead_audit(lead_id, limit=limit)
 
 
 @router.patch("/{lead_id}", response_model=LeadResponse)
@@ -69,6 +89,11 @@ async def update_lead(
     db: AsyncSession = Depends(get_db),
 ):
     service = LeadService(db)
+    if current_user.role.name == "manager":
+        lead = await service.repo.get_or_raise(lead_id)
+        if lead.assigned_to != current_user.id:
+            from app.core.exceptions import ForbiddenError
+            raise ForbiddenError("Access denied")
     return await service.update_lead(lead_id, data, updated_by=current_user.id)
 
 
@@ -80,6 +105,11 @@ async def attach_client(
     db: AsyncSession = Depends(get_db),
 ):
     service = LeadService(db)
+    if current_user.role.name == "manager":
+        lead = await service.repo.get_or_raise(lead_id)
+        if lead.assigned_to != current_user.id:
+            from app.core.exceptions import ForbiddenError
+            raise ForbiddenError("Access denied")
     return await service.attach_client(lead_id, data.client_id, updated_by=current_user.id)
 
 
@@ -92,5 +122,10 @@ async def convert_to_order(
 ):
     """Конвертация заявки в заказ (по ТЗ заявка всегда конвертируется)."""
     service = LeadService(db)
+    if current_user.role.name == "manager":
+        lead = await service.repo.get_or_raise(lead_id)
+        if lead.assigned_to != current_user.id:
+            from app.core.exceptions import ForbiddenError
+            raise ForbiddenError("Access denied")
     order = await service.convert_to_order(lead_id, data, created_by=current_user.id)
     return {"order_id": str(order.id)}

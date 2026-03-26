@@ -13,6 +13,21 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    import bcrypt  # noqa: F401 — нужен passlib[bcrypt]; проверка до импорта app
+except ModuleNotFoundError:
+    print(
+        "Ошибка: нет модуля bcrypt — скорее всего запущен не тот Python/venv "
+        "(например, каталог env/, а не .venv311/).\n"
+        "Сделайте так:\n"
+        "  source .venv311/bin/activate && pip install -e .\n"
+        "  python scripts/create_user.py ...\n"
+        "или одной командой:\n"
+        "  .venv311/bin/python scripts/create_user.py ...",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker

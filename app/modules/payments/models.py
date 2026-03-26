@@ -46,11 +46,16 @@ class Invoice(Base):
     deal_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("deals.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    issuer_company_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(30), default=InvoiceStatus.DRAFT, nullable=False)
     pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    issuer_company: Mapped["Company | None"] = relationship("Company")
 
 
 from app.modules.deals.models import Deal  # noqa: E402
+from app.modules.clients.models import Company  # noqa: E402

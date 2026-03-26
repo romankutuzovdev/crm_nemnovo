@@ -7,6 +7,16 @@ import sys
 # Добавляем корень проекта в path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    import bcrypt  # noqa: F401
+except ModuleNotFoundError:
+    print(
+        "Ошибка: нет модуля bcrypt — активируйте venv проекта "
+        "(например, source .venv311/bin/activate) и выполните: pip install -e .",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
