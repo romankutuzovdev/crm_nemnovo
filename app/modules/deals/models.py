@@ -92,7 +92,9 @@ class Deal(Base):
             self.payment_status = PaymentStatus.OVERPAID
 
     def __repr__(self) -> str:
-        return f"<Deal {self.number} status={self.status}>"
+        number = self.__dict__.get("number", "<detached>")
+        status = self.__dict__.get("status", "<detached>")
+        return f"<Deal {number} status={status}>"
 
 
 # В терминах ТЗ "Заказ" — основная сущность.

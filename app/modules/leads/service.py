@@ -76,38 +76,35 @@ class LeadService:
         lead = await self.repo.get_or_raise(lead_id)
         if lead.status == LeadStatus.CONVERTED:
             raise ValidationError("Cannot modify a converted lead")
-
-        async with self.session.begin():
-            lead = await self.repo.update(lead_id, client_id=client_id)
-            await write_audit_log(
-                self.session, updated_by, AuditAction.UPDATE, "leads", lead_id,
-                after={"client_id": str(client_id)},
-            )
+        lead = await self.repo.update(lead_id, client_id=client_id)
+        await write_audit_log(
+            self.session, updated_by, AuditAction.UPDATE, "leads", lead_id,
+            after={"client_id": str(client_id)},
+        )
         return lead
 
     async def update_lead(self, lead_id: UUID, data: LeadUpdate, updated_by: UUID) -> Lead:
+        update_data = data.model_dump(exclude_none=True)
+
         lead = await self.repo.get_or_raise(lead_id)
         if lead.status == LeadStatus.CONVERTED:
             raise ValidationError("Cannot modify a converted lead")
-        update_data = data.model_dump(exclude_none=True)
-
-        async with self.session.begin():
-            lead = await self.repo.update(lead_id, **update_data)
-            await write_audit_log(
-                self.session, updated_by, AuditAction.UPDATE, "leads", lead_id, after=update_data
-            )
+        lead = await self.repo.update(lead_id, **update_data)
+        await write_audit_log(
+            self.session, updated_by, AuditAction.UPDATE, "leads", lead_id, after=update_data
+        )
         return lead
 
     async def convert_to_order(self, lead_id: UUID, data: LeadConvertToOrderRequest, created_by: UUID):
         """Конвертирует заявку в заказ и помечает заявку как converted."""
-        lead = await self.repo.get_or_raise(lead_id)
-        if lead.status == LeadStatus.CONVERTED:
-            raise ValidationError("Lead already converted")
-
         from datetime import date as dt_date
         from app.modules.orders.schemas import OrderCreate, OrderItemCreate
         from app.modules.orders.service import OrderService
         from app.shared.enums import ServiceType
+
+        lead = await self.repo.get_or_raise(lead_id)
+        if lead.status == LeadStatus.CONVERTED:
+            raise ValidationError("Lead already converted")
 
         client_id = data.client_id or lead.client_id
         if not client_id:
@@ -135,27 +132,25 @@ class LeadService:
             ],
             bookings=[],
         )
+        order_service = OrderService(self.session)
+        order = await order_service.create_order(order_data, created_by=created_by)
 
-        async with self.session.begin():
-            order_service = OrderService(self.session)
-            order = await order_service.create_order(order_data, created_by=created_by)
+        # приоритет: явный assigned_to из запроса
+        if data.assigned_to:
+            order.assigned_to = data.assigned_to
 
-            # приоритет: явный assigned_to из запроса
-            if data.assigned_to:
-                order.assigned_to = data.assigned_to
+        # lead -> converted + связь
+        lead.status = LeadStatus.CONVERTED
+        lead.converted_deal_id = order.id
 
-            # lead -> converted + связь
-            lead.status = LeadStatus.CONVERTED
-            lead.converted_deal_id = order.id
-
-            await write_audit_log(
-                self.session,
-                created_by,
-                AuditAction.UPDATE,
-                "leads",
-                lead_id,
-                after={"status": LeadStatus.CONVERTED, "converted_order_id": str(order.id)},
-            )
+        await write_audit_log(
+            self.session,
+            created_by,
+            AuditAction.UPDATE,
+            "leads",
+            lead_id,
+            after={"status": LeadStatus.CONVERTED, "converted_order_id": str(order.id)},
+        )
 
         return order
 

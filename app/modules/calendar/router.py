@@ -10,7 +10,11 @@ from app.modules.calendar.repository import CalendarRepository
 from app.shared.enums import ServiceType
 from pydantic import BaseModel
 
-from app.modules.calendar.schemas import CalendarEventResponse, CalendarQuickCreate
+from app.modules.calendar.schemas import (
+    CalendarEventMultiCreate,
+    CalendarEventResponse,
+    CalendarQuickCreate,
+)
 
 
 class BookingMoveRequest(BaseModel):
@@ -105,3 +109,70 @@ async def create_calendar_event(
     service = OrderService(db)
     order = await service.create_order(order_data, created_by=current_user.id)
     return {"id": str(order.id), "message": "Заказ создан"}
+
+
+@router.post("/events/multi", status_code=201)
+async def create_calendar_multi_event(
+    data: CalendarEventMultiCreate,
+    current_user=require_permission("orders", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создание одной карточки мероприятия с набором услуг и слотов."""
+    from app.core.exceptions import AssetConflictError, ValidationError
+    from app.modules.assets.repository import AssetRepository
+    from app.modules.deals.repository import DealRepository
+    from app.modules.orders.service import OrderService
+    from app.modules.users.assignment import pick_manager_by_load
+
+    if not data.services:
+        raise ValidationError("Нужно добавить хотя бы одну услугу")
+    if not data.slots:
+        raise ValidationError("Нужно добавить хотя бы один слот")
+
+    # Проверяем конфликты по всем слотам заранее
+    asset_repo = AssetRepository(db)
+    for slot in data.slots:
+        has_conflict = await asset_repo.has_conflict(
+            slot.asset_id,
+            slot.start_datetime,
+            slot.end_datetime,
+        )
+        if has_conflict:
+            raise AssetConflictError()
+
+    min_start = min(slot.start_datetime for slot in data.slots)
+    max_end = max(slot.end_datetime for slot in data.slots)
+    picked_manager_id = await pick_manager_by_load(db)
+    assigned_to = picked_manager_id or current_user.id
+
+    order_data = OrderCreate(
+        client_id=data.client_id,
+        lead_id=None,
+        service_type=ServiceType.COMBINED,
+        start_date=min_start.date(),
+        end_date=max_end.date(),
+        guests_count=data.guests_count,
+        notes=data.notes,
+        items=[
+            OrderItemCreate(
+                description=f"[{line.service_type.value}] {line.description}",
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+            )
+            for line in data.services
+        ],
+        bookings=[
+            BookingInOrderCreate(
+                asset_id=slot.asset_id,
+                start_datetime=slot.start_datetime,
+                end_datetime=slot.end_datetime,
+                quantity=slot.quantity,
+            )
+            for slot in data.slots
+        ],
+    )
+    service = OrderService(db)
+    order = await service.create_order(order_data, created_by=current_user.id)
+    if assigned_to != current_user.id:
+        await DealRepository(db).update(order.id, assigned_to=assigned_to)
+    return {"id": str(order.id), "assigned_to": str(assigned_to), "message": "Мероприятие создано"}

@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
 import { apiFetch } from "@/lib/api";
+import { PageTransition } from "@/components/motion";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function DashboardLayout({
   children,
@@ -39,7 +41,14 @@ export default function DashboardLayout({
     }
   };
 
-  if (!_hasHydrated || !user) return null;
+  if (!_hasHydrated) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-4">
+        <p className="text-text-secondary text-sm">Загрузка…</p>
+      </main>
+    );
+  }
+  if (!user) return null;
 
   const navActive = (href: string) =>
     href === "/dashboard"
@@ -53,19 +62,28 @@ export default function DashboardLayout({
     { href: "/dashboard/clients", label: "Клиенты" },
     { href: "/dashboard/companies", label: "Компании" },
     { href: "/dashboard/orders", label: "Заказы" },
+    { href: "/dashboard/rafting", label: "Сплавы" },
+    { href: "/dashboard/hostel", label: "Хостел" },
+    { href: "/dashboard/rent", label: "Аренда" },
     { href: "/dashboard/payments", label: "Оплаты" },
     { href: "/dashboard/assets", label: "Активы" },
     { href: "/dashboard/stock", label: "Склад" },
     { href: "/dashboard/reports", label: "Отчёты" },
+    ...(user.role?.name === "director" || user.role?.name === "admin"
+      ? [{ href: "/dashboard/reports/analytics", label: "Аналитика (директор)" }]
+      : []),
     { href: "/dashboard/settings", label: "Настройки" },
   ];
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-56 bg-slate-900/50 border-r border-slate-700 flex flex-col">
-        <div className="p-4 border-b border-slate-700">
+      <aside className="w-56 bg-surface border-r border-border flex flex-col">
+        <div className="p-4 border-b border-border">
           <h2 className="font-semibold">CRM Nemnovo</h2>
-          <p className="text-xs text-slate-500 mt-1">{user.email}</p>
+          <p className="text-xs text-text-secondary mt-1">{user.email}</p>
+          <div className="mt-3">
+            <ThemeToggle />
+          </div>
         </div>
         <nav className="flex-1 p-2">
           {nav.map((item) => (
@@ -74,24 +92,30 @@ export default function DashboardLayout({
               href={item.href}
               className={`block px-4 py-2 rounded-lg mb-1 transition-colors ${
                 navActive(item.href)
-                  ? "bg-emerald-600/20 text-emerald-400"
-                  : "hover:bg-slate-800 text-slate-300"
+                  ? "bg-primary/15 text-primary"
+                  : "hover:bg-surface-hover text-text-secondary"
               }`}
             >
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="p-2">
+        <div className="p-2 space-y-2">
           <button
             onClick={handleLogout}
-            className="w-full px-4 py-2 text-left text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+            className="w-full px-4 py-2 text-left text-text-secondary hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
           >
             Выйти
           </button>
         </div>
       </aside>
-      <main className={`flex-1 overflow-auto ${pathname === "/dashboard/calendar" ? "p-0" : "p-6"}`}>{children}</main>
+      <main
+        className={`flex-1 overflow-auto bg-bg ${
+          pathname === "/dashboard/calendar" ? "p-0" : "p-6"
+        }`}
+      >
+        <PageTransition routeKey={pathname}>{children}</PageTransition>
+      </main>
     </div>
   );
 }

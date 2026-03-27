@@ -25,14 +25,23 @@ class PaymentService:
         self.deal_repo = DealRepository(session)
         self.company_repo = CompanyRepository(session)
 
+    async def _recalc_deal_payment_aggregates(self, deal_id: UUID) -> tuple[float, str]:
+        """
+        Источник истины по paid_amount — сумма CONFIRMED платежей.
+        Так мы избегаем накопления ошибок/рассинхронизации при возвратах и вебхуках.
+        """
+        deal = await self.deal_repo.get_for_update(deal_id)
+        paid = await self.repo.sum_confirmed_by_deal(deal_id)
+        deal.paid_amount = paid
+        deal.recalculate_payment_status()
+        return float(deal.paid_amount), str(deal.payment_status)
+
     async def create_payment(self, data: PaymentCreate, confirmed_by: UUID) -> Payment:
         if data.amount <= 0:
             raise ValidationError("Payment amount must be positive")
 
         async with self.session.begin():
             # Pessimistic lock to prevent race conditions
-            deal = await self.deal_repo.get_for_update(data.deal_id)
-
             payment = Payment(
                 deal_id=data.deal_id,
                 amount=data.amount,
@@ -45,10 +54,7 @@ class PaymentService:
             self.session.add(payment)
             await self.session.flush()
 
-            # Update deal aggregates
-            new_paid = float(deal.paid_amount) + data.amount
-            deal.paid_amount = new_paid
-            deal.recalculate_payment_status()
+            new_paid, new_status = await self._recalc_deal_payment_aggregates(data.deal_id)
 
             await write_audit_log(
                 self.session, confirmed_by, AuditAction.CREATE, "payments", payment.id,
@@ -57,7 +63,7 @@ class PaymentService:
                     "amount": data.amount,
                     "method": data.method,
                     "new_deal_paid": new_paid,
-                    "new_deal_status": deal.payment_status,
+                    "new_deal_status": new_status,
                 },
             )
 
@@ -80,12 +86,23 @@ class PaymentService:
             return payment  # Idempotent
 
         async with self.session.begin():
-            deal = await self.deal_repo.get_for_update(payment.deal_id)
             payment.status = PaymentTxStatus.CONFIRMED
             payment.paid_at = datetime.now(timezone.utc)
 
-            deal.paid_amount = float(deal.paid_amount) + float(payment.amount)
-            deal.recalculate_payment_status()
+            new_paid, new_status = await self._recalc_deal_payment_aggregates(payment.deal_id)
+            await write_audit_log(
+                self.session,
+                None,
+                AuditAction.UPDATE,
+                "payments",
+                payment.id,
+                after={
+                    "external_id": external_id,
+                    "status": PaymentTxStatus.CONFIRMED.value,
+                    "new_deal_paid": new_paid,
+                    "new_deal_status": new_status,
+                },
+            )
 
         logger.info("payment.confirmed_online", external_id=external_id)
         return payment
@@ -96,14 +113,16 @@ class PaymentService:
             raise ValidationError("Only confirmed payments can be refunded")
 
         async with self.session.begin():
-            deal = await self.deal_repo.get_for_update(payment.deal_id)
             payment.status = PaymentTxStatus.REFUNDED
-            deal.paid_amount = max(0.0, float(deal.paid_amount) - float(payment.amount))
-            deal.recalculate_payment_status()
+            new_paid, new_status = await self._recalc_deal_payment_aggregates(payment.deal_id)
 
             await write_audit_log(
                 self.session, refunded_by, AuditAction.UPDATE, "payments", payment_id,
-                after={"status": PaymentTxStatus.REFUNDED},
+                after={
+                    "status": PaymentTxStatus.REFUNDED.value,
+                    "new_deal_paid": new_paid,
+                    "new_deal_status": new_status,
+                },
             )
 
         logger.info("payment.refunded", payment_id=str(payment_id))

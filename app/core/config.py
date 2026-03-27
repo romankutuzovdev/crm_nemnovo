@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     TELEPHONY_API_KEY: str = ""
     TELEPHONY_API_SECRET: str = ""
     TELEPHONY_WEBHOOK_SECRET: str = ""
+    MTS_VATS_WEBHOOK_TOKEN: str = ""
 
     # Payment (YooKassa)
     YOOKASSA_SHOP_ID: str = ""

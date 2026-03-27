@@ -497,7 +497,7 @@ export default function OrderDetailsPage() {
                   if (confirm("Отменить заказ? Это отменит связанные бронирования.")) cancelOrder.mutate();
                 }}
                 disabled={cancelOrder.isPending}
-                className="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-600 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white"
               >
                 {cancelOrder.isPending ? "..." : "Отменить"}
               </button>
@@ -505,7 +505,7 @@ export default function OrderDetailsPage() {
           </div>
           <div className="text-slate-400 text-sm mt-1">
             Клиент:{" "}
-            <Link className="text-emerald-400 hover:underline" href={`/dashboard/clients/${order.client_id}`}>
+            <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/clients/${order.client_id}`}>
               {orderClient
                 ? `${orderClient.first_name} ${orderClient.last_name} · ${orderClient.phone}`
                 : order.client_id}
@@ -559,7 +559,7 @@ export default function OrderDetailsPage() {
             onClick={() => setTab(key)}
             className={`px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === key
-                ? "border-emerald-500 text-emerald-400"
+                ? "border-brandBlue-600 text-brandBlue-300"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -690,7 +690,7 @@ export default function OrderDetailsPage() {
                   transitionStatus.isPending ||
                   !!(editStartDate && editEndDate && editEndDate < editStartDate)
                 }
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
                 {updateOrder.isPending || transitionStatus.isPending ? "Сохранение..." : "Сохранить"}
               </button>
@@ -760,7 +760,7 @@ export default function OrderDetailsPage() {
                 setShowAllAssets(false);
                 setBookingAssetId("");
               }}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium"
+              className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium"
             >
               + Бронирование
             </button>
@@ -821,7 +821,7 @@ export default function OrderDetailsPage() {
                                 })
                               }
                               disabled={updateBooking.isPending}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm"
+                              className="px-3 py-1.5 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white text-sm"
                             >
                               {updateBooking.isPending ? "..." : "Сохранить"}
                             </button>
@@ -857,7 +857,7 @@ export default function OrderDetailsPage() {
                                 if (confirm("Отменить бронирование?")) cancelBooking.mutate(b.id);
                               }}
                               disabled={cancelBooking.isPending || b.status === "cancelled"}
-                              className="px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 disabled:opacity-50 text-sm"
+                              className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm"
                             >
                               Отменить
                             </button>
@@ -947,7 +947,7 @@ export default function OrderDetailsPage() {
                   <button
                     onClick={() => addBooking.mutate()}
                     disabled={!bookingAssetId || addBooking.isPending}
-                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                    className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
                   >
                     {addBooking.isPending ? "Добавление..." : "Добавить"}
                   </button>
@@ -1092,7 +1092,7 @@ export default function OrderDetailsPage() {
                 <button
                   onClick={() => createPayment.mutate()}
                   disabled={createPayment.isPending}
-                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
                 >
                   {createPayment.isPending ? "Сохранение..." : "Добавить платеж"}
                 </button>

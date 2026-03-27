@@ -33,30 +33,30 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold">Настройки</h1>
 
-      <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5 text-slate-300">
-        <h2 className="text-lg font-semibold text-slate-100 mb-2">Приём заявок с сайта (webhook)</h2>
-        <p className="text-sm text-slate-400 mb-4">
+      <section className="rounded-xl border border-border bg-surface p-5 text-text">
+        <h2 className="text-lg font-semibold text-text mb-2">Приём заявок с сайта (webhook)</h2>
+        <p className="text-sm text-text-secondary mb-4">
           CRM создаёт клиента по телефону (или находит существующего) и заявку со статусом «новая».
           Ответственный менеджер назначается автоматически: выбирается активный пользователь с ролью
           «manager» с наименьшим числом заявок в статусах «новая» и «в работе» (равномерная нагрузка).
-          В продакшене обязательно задайте <code className="text-emerald-400/90">SITE_WEBHOOK_SECRET</code> в
+          В продакшене обязательно задайте <code className="text-primary">SITE_WEBHOOK_SECRET</code> в
           окружении API и передавайте подпись тела запроса.
         </p>
 
         <dl className="space-y-3 text-sm">
           <div>
-            <dt className="text-slate-500">Метод и URL</dt>
+            <dt className="text-text-secondary">Метод и URL</dt>
             <dd>
-              <code className="block mt-1 p-2 rounded-lg bg-slate-900 border border-slate-600 break-all">
+              <code className="block mt-1 p-2 rounded-lg bg-surface-hover border border-border break-all">
                 POST {fullUrl}
               </code>
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500">Заголовок подписи</dt>
+            <dt className="text-text-secondary">Заголовок подписи</dt>
             <dd>
-              <code className="text-emerald-400/90">X-Webhook-Signature</code> — hex HMAC-SHA256 от{" "}
-              <strong>сырых байт</strong> тела (как в CRM: <code className="text-slate-400">hmac.new(secret, body, sha256).hexdigest()</code>
+              <code className="text-primary">X-Webhook-Signature</code> — hex HMAC-SHA256 от{" "}
+              <strong>сырых байт</strong> тела (как в CRM: <code className="text-text-secondary">hmac.new(secret, body, sha256).hexdigest()</code>
               ).
             </dd>
           </div>
@@ -81,7 +81,7 @@ export default function SettingsPage() {
           <div>
             <dt className="text-slate-500">Заголовок подписи</dt>
             <dd>
-              <code className="text-emerald-400/90">X-Telephony-Signature</code> — hex HMAC-SHA256 от сырых байт тела.
+              <code className="text-brandBlue-300/90">X-Telephony-Signature</code> — hex HMAC-SHA256 от сырых байт тела.
               Секрет: <code className="text-slate-300">TELEPHONY_WEBHOOK_SECRET</code>.
             </dd>
           </div>

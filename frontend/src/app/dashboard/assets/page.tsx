@@ -69,7 +69,7 @@ export default function AssetsPage() {
               {assets.map((a) => (
                 <tr key={a.id} className="border-t border-slate-700 hover:bg-slate-800/30">
                   <td className="p-4">
-                    <Link href={`/dashboard/assets/${a.id}`} className="text-emerald-400 hover:underline">
+                    <Link href={`/dashboard/assets/${a.id}`} className="text-brandBlue-700 hover:underline">
                       {a.name}
                     </Link>
                   </td>

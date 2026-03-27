@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -32,6 +32,9 @@ class RaftingInstructor(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Выплаты инструктору (ИП): фикс за сплав + ставка за гостя.
+    payout_per_trip: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, nullable=False)
+    payout_per_guest: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
@@ -69,6 +72,12 @@ class RaftingTrip(Base):
     trip_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     guests_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     status: Mapped[str] = mapped_column(String(30), default=BookingStatus.PENDING, nullable=False, index=True)
+    instructor_fee: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    instructor_paid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    instructor_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    instructor_paid_by: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 

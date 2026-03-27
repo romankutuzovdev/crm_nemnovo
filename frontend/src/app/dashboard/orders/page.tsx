@@ -160,7 +160,7 @@ export default function OrdersPage() {
             setSelectedClient(null);
             setShowCreate(true);
           }}
-          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium"
+          className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium"
         >
           + Новый заказ
         </button>
@@ -184,7 +184,7 @@ export default function OrdersPage() {
               {orders.map((o) => (
                 <tr key={o.id} className="border-t border-slate-700 hover:bg-slate-800/30">
                   <td className="p-4">
-                    <Link className="text-emerald-400 hover:underline" href={`/dashboard/orders/${o.id}`}>
+                    <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/orders/${o.id}`}>
                       {o.number}
                     </Link>
                   </td>
@@ -197,7 +197,7 @@ export default function OrdersPage() {
                   <td className="p-4">
                     {o.client_name ? (
                       <Link
-                        className="text-emerald-400/90 hover:underline"
+                        className="text-brandBlue-300/90 hover:underline"
                         href={`/dashboard/clients/${o.client_id}`}
                       >
                         {o.client_name}
@@ -223,7 +223,7 @@ export default function OrdersPage() {
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-xl border border-slate-600 max-h-[90vh] overflow-y-auto">
+          <div className="bg-brandBlue-950/35 rounded-xl p-6 w-full max-w-xl border border-brandBlue-700/50 max-h-[90vh] overflow-y-auto shadow-[0_0_0_1px_rgba(37,99,235,0.15)]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Новый заказ</h2>
               <button
@@ -238,7 +238,7 @@ export default function OrdersPage() {
               <div className="md:col-span-2">
                 <label className="block text-sm text-slate-400 mb-1">Клиент</label>
                 {selectedClient ? (
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/80 border border-emerald-600/40">
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/80 border border-brandBlue-400/40">
                     <span className="text-slate-200">
                       {selectedClient.first_name} {selectedClient.last_name} · {selectedClient.phone}
                     </span>
@@ -255,7 +255,7 @@ export default function OrdersPage() {
                     <input
                       value={clientSearch}
                       onChange={(e) => setClientSearch(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                       placeholder="Имя, телефон, email…"
                       autoComplete="off"
                     />
@@ -293,7 +293,7 @@ export default function OrdersPage() {
                     </div>
                     <p className="text-xs text-slate-500 mt-2">
                       Нет клиента?{" "}
-                      <Link href="/dashboard/clients" className="text-emerald-400 hover:underline">
+                      <Link href="/dashboard/clients" className="text-brandBlue-300 hover:underline">
                         Перейти к клиентам
                       </Link>
                     </p>
@@ -305,7 +305,7 @@ export default function OrdersPage() {
                 <select
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                 >
                   <option value="rafting">Сплав</option>
                   <option value="hostel">Хостел</option>
@@ -318,7 +318,7 @@ export default function OrdersPage() {
                 <input
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                   inputMode="decimal"
                 />
               </div>
@@ -328,7 +328,7 @@ export default function OrdersPage() {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                 />
               </div>
               <div>
@@ -337,7 +337,7 @@ export default function OrdersPage() {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                 />
               </div>
               <div className="md:col-span-2">
@@ -345,7 +345,7 @@ export default function OrdersPage() {
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                   rows={3}
                 />
               </div>
@@ -355,7 +355,7 @@ export default function OrdersPage() {
                 type="button"
                 onClick={() => createOrder.mutate()}
                 disabled={!selectedClient || createOrder.isPending}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
                 {createOrder.isPending ? "Создание..." : "Создать"}
               </button>

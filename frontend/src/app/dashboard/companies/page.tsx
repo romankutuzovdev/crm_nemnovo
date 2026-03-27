@@ -105,7 +105,7 @@ export default function CompaniesPage() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium whitespace-nowrap"
+            className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium whitespace-nowrap"
           >
             + Новая компания
           </button>
@@ -132,7 +132,7 @@ export default function CompaniesPage() {
               {companies.map((c) => (
                 <tr key={c.id} className="border-t border-slate-700 hover:bg-slate-800/30">
                   <td className="p-4">
-                    <Link className="text-emerald-400 hover:underline" href={`/dashboard/companies/${c.id}`}>
+                    <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/companies/${c.id}`}>
                       {c.name}
                     </Link>
                   </td>
@@ -222,7 +222,7 @@ export default function CompaniesPage() {
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
                 disabled={createCompany.isPending || !createForm.name.trim()}
                 onClick={() => createCompany.mutate()}
               >

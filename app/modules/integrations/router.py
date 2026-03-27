@@ -63,6 +63,33 @@ async def telephony_webhook(
         return await service.handle_telephony_event(payload, ip_address=ip)
 
 
+@router.post("/mts-vats", include_in_schema=False)
+async def mts_vats_webhook(
+    request: Request,
+    token: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Webhook endpoint for MTS Virtual PBX.
+    Supports token auth via query (`?token=...`) or header `X-MTS-Token`.
+    """
+    expected_token = (settings.MTS_VATS_WEBHOOK_TOKEN or "").strip()
+    provided_token = (token or request.headers.get("X-MTS-Token", "")).strip()
+
+    if expected_token and provided_token != expected_token:
+        raise ForbiddenError("Invalid MTS webhook token")
+
+    body = await request.body()
+    import json
+
+    payload = json.loads(body)
+    ip = request.client.host if request.client else ""
+
+    async with db.begin():
+        service = IntegrationService(db)
+        return await service.handle_mts_vats_event(payload, ip_address=ip)
+
+
 @router.get("/logs", response_model=list[WebhookLogResponse])
 async def list_webhook_logs(
     source: str | None = Query(None),

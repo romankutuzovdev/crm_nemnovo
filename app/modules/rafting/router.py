@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -181,7 +181,11 @@ async def create_trip(
         deal_id=data.deal_id,
     )
     repo = RaftingTripRepository(db)
-    return await repo.create(**data.model_dump())
+    payload = data.model_dump()
+    if data.instructor_id is not None:
+        instr = await RaftingInstructorRepository(db).get_or_raise(data.instructor_id)
+        payload["instructor_fee"] = float(instr.payout_per_trip) + float(instr.payout_per_guest) * int(data.guests_count)
+    return await repo.create(**payload)
 
 
 @router.patch("/trips/{trip_id}", response_model=RaftingTripResponse)
@@ -205,5 +209,37 @@ async def update_trip(
         vehicle_id=vehicle_id,
         deal_id=deal_id,
     )
+    # Пересчёт выплаты инструктору, если изменились instructor_id/guests_count, и сплав ещё не помечен как оплаченный.
+    if not existing.instructor_paid and ("instructor_id" in payload or "guests_count" in payload):
+        instr_id = payload.get("instructor_id", existing.instructor_id)
+        guests = payload.get("guests_count", existing.guests_count)
+        if instr_id is None:
+            payload["instructor_fee"] = None
+        else:
+            instr = await RaftingInstructorRepository(db).get_or_raise(instr_id)
+            payload["instructor_fee"] = float(instr.payout_per_trip) + float(instr.payout_per_guest) * int(guests)
     return await repo.update(trip_id, **payload)
+
+
+@router.post("/trips/{trip_id}/mark-paid", response_model=RaftingTripResponse)
+async def mark_trip_paid(
+    trip_id: UUID,
+    current_user=require_permission("orders", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Пометить выплату инструктору по конкретному сплаву как произведённую."""
+    repo = RaftingTripRepository(db)
+    trip = await repo.get_or_raise(trip_id)
+    if trip.instructor_id is None:
+        from app.core.exceptions import ValidationError
+
+        raise ValidationError("Trip has no instructor")
+    if trip.instructor_paid:
+        return trip
+    return await repo.update(
+        trip_id,
+        instructor_paid=True,
+        instructor_paid_at=datetime.now(timezone.utc),
+        instructor_paid_by=current_user.id,
+    )
 

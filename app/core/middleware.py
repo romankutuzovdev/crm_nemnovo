@@ -28,7 +28,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             # Keep request context (request_id, method, path) for exception logs
             logger.exception(
                 "http.request_error",
-                error=str(exc),
+                error_type=type(exc).__name__,
             )
             raise
         duration_ms = round((time.monotonic() - start_time) * 1000, 2)

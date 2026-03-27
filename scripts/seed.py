@@ -77,7 +77,7 @@ async def seed():
                 print(f"  Создана категория активов: {name}")
 
         # Пример актива (байдарка) для тестов
-        result = await session.execute(select(Asset))
+        result = await session.execute(select(Asset.id).limit(1))
         if result.scalar_one_or_none() is None and "kayak" in categories:
             asset = Asset(
                 category_id=categories["kayak"].id,

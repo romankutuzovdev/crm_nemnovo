@@ -13,6 +13,15 @@ from app.shared.enums import DealStatus
 class DealRepository(BaseRepository[Deal]):
     model = Deal
 
+    @staticmethod
+    def _response_load_options():
+        return (
+            selectinload(Deal.client),
+            selectinload(Deal.assigned_user),
+            selectinload(Deal.items),
+            selectinload(Deal.bookings),
+        )
+
     async def list(
         self,
         filters: dict[str, Any] | None = None,
@@ -21,10 +30,7 @@ class DealRepository(BaseRepository[Deal]):
     ) -> List[Deal]:
         stmt = (
             select(Deal)
-            .options(
-                selectinload(Deal.client),
-                selectinload(Deal.assigned_user),
-            )
+            .options(*self._response_load_options())
             .order_by(Deal.created_at.desc())
         )
         if filters:
@@ -45,27 +51,23 @@ class DealRepository(BaseRepository[Deal]):
         result = await self.session.execute(
             select(Deal)
             .options(
-                selectinload(Deal.items),
-                selectinload(Deal.bookings),
+                *self._response_load_options(),
                 selectinload(Deal.payments),
-                selectinload(Deal.client),
-                selectinload(Deal.assigned_user),
             )
             .where(Deal.id == deal_id)
         )
         return result.scalar_one_or_none()
 
     async def find_by_number(self, number: str) -> Deal | None:
-        result = await self.session.execute(select(Deal).where(Deal.number == number))
+        result = await self.session.execute(
+            select(Deal).options(*self._response_load_options()).where(Deal.number == number)
+        )
         return result.scalar_one_or_none()
 
     async def list_by_client(self, client_id: UUID, offset: int = 0, limit: int = 50) -> List[Deal]:
         result = await self.session.execute(
             select(Deal)
-            .options(
-                selectinload(Deal.client),
-                selectinload(Deal.assigned_user),
-            )
+            .options(*self._response_load_options())
             .where(Deal.client_id == client_id)
             .order_by(Deal.created_at.desc())
             .offset(offset).limit(limit)
@@ -75,15 +77,30 @@ class DealRepository(BaseRepository[Deal]):
     async def list_by_manager(self, manager_id: UUID, offset: int = 0, limit: int = 50) -> List[Deal]:
         result = await self.session.execute(
             select(Deal)
-            .options(
-                selectinload(Deal.client),
-                selectinload(Deal.assigned_user),
-            )
+            .options(*self._response_load_options())
             .where(Deal.assigned_to == manager_id)
             .order_by(Deal.created_at.desc())
             .offset(offset).limit(limit)
         )
         return list(result.scalars().all())
+
+    async def count_open_deals_for_manager(self, manager_id: UUID) -> int:
+        """Активные сделки менеджера: new / confirmed / in_progress."""
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Deal)
+            .where(
+                Deal.assigned_to == manager_id,
+                Deal.status.in_(
+                    [
+                        DealStatus.NEW.value,
+                        DealStatus.CONFIRMED.value,
+                        DealStatus.IN_PROGRESS.value,
+                    ]
+                ),
+            )
+        )
+        return int(result.scalar_one())
 
     async def get_for_update(self, deal_id: UUID) -> Deal:
         from sqlalchemy import text

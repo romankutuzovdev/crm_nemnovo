@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 export interface User {
   id: string;
@@ -34,13 +34,34 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "crm-auth",
+      storage: createJSONStorage(() => {
+        try {
+          return localStorage;
+        } catch {
+          // Например, Safari private / запрет storage. Дадим приложению жить без persist.
+          return {
+            getItem: () => null,
+            setItem: () => {},
+            removeItem: () => {},
+            key: () => null,
+            length: 0,
+            clear: () => {},
+          } as unknown as Storage;
+        }
+      }),
       partialize: (s) => ({
         accessToken: s.accessToken,
         refreshToken: s.refreshToken,
         user: s.user,
       }),
-      onRehydrateStorage: () => () => {
-        useAuthStore.setState({ _hasHydrated: true });
+      onRehydrateStorage: () => (_state, error) => {
+        // Даже если persist не смог прочитать storage, UI не должен зависать на “Загрузка…”
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.warn("auth.persist.rehydrate_error", error);
+        }
+        // Важно: не ссылаться на useAuthStore здесь (TDZ). Используем state, который передаёт persist.
+        _state?.setHasHydrated(true);
       },
     }
   )

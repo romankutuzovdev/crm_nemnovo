@@ -38,4 +38,7 @@ class Lead(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     def __repr__(self) -> str:
-        return f"<Lead {self.id} source={self.source} status={self.status}>"
+        lead_id = self.__dict__.get("id", "<detached>")
+        source = self.__dict__.get("source", "<detached>")
+        status = self.__dict__.get("status", "<detached>")
+        return f"<Lead {lead_id} source={source} status={status}>"

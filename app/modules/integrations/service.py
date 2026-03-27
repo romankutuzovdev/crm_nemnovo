@@ -52,62 +52,195 @@ class IntegrationService:
         caller_phone = payload.get("caller_id", "")
         if not caller_phone:
             log.error = "No caller_id in payload"
+            await self.session.flush()
             return {"status": "ignored"}
 
+        try:
+            result = await self._process_telephony_payload(payload, caller_phone)
+            log.is_processed = True
+            await self.session.flush()
+            return result
+        except Exception as e:
+            log.error = str(e)
+            await self.session.flush()
+            logger.error("integration.telephony_failed", error=str(e))
+            raise
+
+    async def _process_telephony_payload(self, payload: dict, caller_phone: str) -> dict:
         # Find existing client by phone
         from app.modules.clients.repository import ClientRepository
         from app.shared.utils import normalize_phone
-        from app.modules.leads.models import Lead
         from app.shared.enums import LeadSource, LeadStatus
 
-        try:
-            normalized_phone = normalize_phone(caller_phone)
-            client_repo = ClientRepository(self.session)
-            client = await client_repo.find_by_phone(normalized_phone)
+        normalized_phone = normalize_phone(caller_phone)
+        client_repo = ClientRepository(self.session)
+        client = await client_repo.find_by_phone(normalized_phone)
 
-            from app.modules.leads.repository import LeadRepository
-            lead_repo = LeadRepository(self.session)
-            assignee = await self.lead_service.pick_assignee_by_load()
+        from app.modules.leads.repository import LeadRepository
+        lead_repo = LeadRepository(self.session)
+        assignee = await self.lead_service.pick_assignee_by_load()
 
-            call_id = payload.get("call_id") or payload.get("callId") or payload.get("id")
-            telephony_comment = (
-                payload.get("comment")
-                or payload.get("event")
-                or payload.get("status")
-                or payload.get("direction")
+        call_id = payload.get("call_id") or payload.get("callId") or payload.get("id")
+        payload_for_storage = payload.get("raw_payload") or payload
+        telephony_comment = (
+            payload.get("comment")
+            or payload.get("event")
+            or payload.get("status")
+            or payload.get("direction")
+        )
+        if call_id:
+            existing = await lead_repo.find_by_source_ref(
+                LeadSource.TELEPHONY.value, call_id
             )
-            if call_id:
-                existing = await lead_repo.find_by_source_ref(
-                    LeadSource.TELEPHONY.value, call_id
-                )
-                if existing:
-                    # Update existing lead (avoid duplicates for repeated telephony events)
-                    existing.client_id = existing.client_id or (client.id if client else None)
-                    if telephony_comment:
-                        existing.comment = str(telephony_comment)
-                    existing.raw_payload = payload
+            if existing:
+                # Update existing lead (avoid duplicates for repeated telephony events)
+                existing.client_id = existing.client_id or (client.id if client else None)
+                if telephony_comment:
+                    existing.comment = str(telephony_comment)
+                existing.raw_payload = payload_for_storage
+                await self.session.flush()
+                return {
+                    "status": "ok",
+                    "lead_id": str(existing.id),
+                    "client_found": client is not None,
+                }
+
+        lead = await lead_repo.create(
+            client_id=client.id if client else None,
+            source=LeadSource.TELEPHONY,
+            source_ref=call_id,
+            status=LeadStatus.NEW,
+            comment=str(telephony_comment) if telephony_comment else None,
+            raw_payload=payload_for_storage,
+            assigned_to=assignee,
+        )
+
+        return {"status": "ok", "lead_id": str(lead.id), "client_found": client is not None}
+
+    @staticmethod
+    def _pick(payload: dict, *keys: str):
+        for key in keys:
+            value = payload.get(key)
+            if value not in (None, ""):
+                return value
+        return None
+
+    @staticmethod
+    def _nested_pick(payload: dict, paths: list[tuple[str, ...]]):
+        for path in paths:
+            current = payload
+            found = True
+            for part in path:
+                if not isinstance(current, dict) or part not in current:
+                    found = False
+                    break
+                current = current[part]
+            if found and current not in (None, ""):
+                return current
+        return None
+
+    async def handle_mts_vats_event(self, payload: dict, ip_address: str = "") -> dict:
+        """
+        Handle MTS VATS webhook payload and create/update telephony lead.
+        Different MTS installations may send slightly different payload keys,
+        so we try several aliases and nested paths.
+        """
+        log = WebhookLog(
+            source="mts_vats",
+            raw_payload=payload,
+            ip_address=ip_address,
+        )
+        self.session.add(log)
+        await self.session.flush()
+
+        try:
+            event = self._pick(payload, "event", "type", "event_type", "call_event")
+            direction = self._pick(payload, "direction", "call_direction")
+            if direction is None:
+                direction = self._nested_pick(payload, [("call", "direction"), ("data", "direction")])
+            if isinstance(direction, str):
+                direction = direction.lower()
+
+            # Process only incoming call events.
+            if direction and direction not in {"in", "incoming", "inbound"}:
+                log.is_processed = True
+                await self.session.flush()
+                return {"status": "ignored", "reason": "not_incoming_direction"}
+
+            if isinstance(event, str):
+                event_l = event.lower()
+                if any(x in event_l for x in ("outgoing", "dialout", "outbound")):
                     log.is_processed = True
                     await self.session.flush()
-                    return {
-                        "status": "ok",
-                        "lead_id": str(existing.id),
-                        "client_found": client is not None,
-                    }
+                    return {"status": "ignored", "reason": "not_incoming_event"}
 
-            lead = await lead_repo.create(
-                client_id=client.id if client else None,
-                source=LeadSource.TELEPHONY,
-                source_ref=call_id,
-                status=LeadStatus.NEW,
-                comment=str(telephony_comment) if telephony_comment else None,
-                raw_payload=payload,
-                assigned_to=assignee,
+            caller_phone = self._pick(
+                payload,
+                "caller_id",
+                "caller",
+                "from",
+                "from_number",
+                "ani",
+                "external_number",
+                "phone",
+            )
+            if caller_phone is None:
+                caller_phone = self._nested_pick(
+                    payload,
+                    [
+                        ("call", "from"),
+                        ("call", "caller"),
+                        ("data", "caller"),
+                        ("data", "phone"),
+                    ],
+                )
+
+            if not caller_phone:
+                log.error = "No caller phone in MTS payload"
+                await self.session.flush()
+                return {"status": "ignored", "reason": "no_caller"}
+
+            call_id = self._pick(
+                payload,
+                "call_id",
+                "callId",
+                "callid",
+                "session_id",
+                "sessionId",
+                "uuid",
+                "id",
+            )
+            if call_id is None:
+                call_id = self._nested_pick(payload, [("call", "id"), ("data", "call_id")])
+
+            mapped_payload = dict(payload)
+            mapped_payload["_integration"] = "mts_vats"
+            mapped_payload["_normalized"] = {
+                "event": event,
+                "direction": direction,
+                "caller_phone": str(caller_phone),
+                "call_id": str(call_id) if call_id is not None else None,
+            }
+
+            # Reuse existing generic telephony flow for dedupe and lead creation.
+            result = await self._process_telephony_payload(
+                {
+                    "caller_id": str(caller_phone),
+                    "call_id": str(call_id) if call_id is not None else None,
+                    "event": event,
+                    "direction": direction,
+                    "comment": self._pick(payload, "status", "state", "event"),
+                    "raw_payload": mapped_payload,
+                },
+                str(caller_phone),
             )
 
             log.is_processed = True
-            return {"status": "ok", "lead_id": str(lead.id), "client_found": client is not None}
+            await self.session.flush()
+            return result
 
         except Exception as e:
             log.error = str(e)
-            logger.error("integration.telephony_failed", error=str(e))
+            await self.session.flush()
+            logger.error("integration.mts_vats_failed", error=str(e))
             raise

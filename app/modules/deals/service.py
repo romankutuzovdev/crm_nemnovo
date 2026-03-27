@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import date
 from uuid import UUID
 
@@ -33,6 +34,15 @@ class DealService:
         self.asset_repo = AssetRepository(session)
         self.client_repo = ClientRepository(session)
 
+    @asynccontextmanager
+    async def _tx(self):
+        """Open a transaction only when session is not already in one."""
+        if self.session.in_transaction():
+            yield
+            return
+        async with self.session.begin():
+            yield
+
     def _validate_status_transition(self, current_status: str, next_status: str) -> None:
         current = DealStatus(current_status)
         target = DealStatus(next_status)
@@ -46,7 +56,7 @@ class DealService:
     async def transition_status(self, deal_id: UUID, status: DealStatus, updated_by: UUID) -> Deal:
         deal = await self.repo.get_or_raise(deal_id)
         self._validate_status_transition(deal.status, status.value)
-        async with self.session.begin():
+        async with self._tx():
             deal = await self.repo.update(deal_id, status=status)
             await write_audit_log(
                 self.session,
@@ -88,7 +98,7 @@ class DealService:
         ]
         total_amount = sum(i["total_price"] for i in items_data)
 
-        async with self.session.begin():
+        async with self._tx():
             number = await self.repo.get_next_number()
             deal = Deal(
                 number=number,
@@ -154,7 +164,7 @@ class DealService:
         if "status" in update_data:
             self._validate_status_transition(deal.status, str(update_data["status"]))
 
-        async with self.session.begin():
+        async with self._tx():
             deal = await self.repo.update(deal_id, **update_data)
             await write_audit_log(
                 self.session, updated_by, AuditAction.UPDATE, "deals", deal_id, after=update_data
@@ -166,7 +176,7 @@ class DealService:
         if deal.status == DealStatus.COMPLETED:
             raise ValidationError("Cannot cancel a completed deal")
 
-        async with self.session.begin():
+        async with self._tx():
             # Cancel all bookings
             from sqlalchemy import update
             from app.modules.bookings.models import Booking

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, getApiUrl } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { FadeUp, Stagger } from "@/components/motion";
 
 interface MethodBreakdown {
   method: string;
@@ -22,6 +23,47 @@ interface ReportSummary {
   outstanding_debt: number;
   by_method: MethodBreakdown[];
   by_service: ServiceBreakdown[];
+}
+
+interface LeadsStatusRow {
+  status: string;
+  count: number;
+}
+
+interface LeadsReport {
+  period_start: string;
+  period_end: string;
+  total_leads_created: number;
+  by_status: LeadsStatusRow[];
+}
+
+interface BookingByAssetRow {
+  asset_id: string;
+  asset_code: string;
+  asset_name: string;
+  category_name: string;
+  bookings_count: number;
+}
+
+interface BookingsReport {
+  period_start: string;
+  period_end: string;
+  total_bookings: number;
+  by_asset: BookingByAssetRow[];
+}
+
+interface InstructorPayoutRow {
+  instructor_id: string;
+  instructor_name: string;
+  trips_count: number;
+  total_due: number;
+}
+
+interface InstructorPayoutsReport {
+  period_start: string;
+  period_end: string;
+  total_due: number;
+  rows: InstructorPayoutRow[];
 }
 
 function toIsoDate(d: Date): string {
@@ -67,6 +109,36 @@ export default function ReportsPage() {
     enabled: !!token && start <= end,
   });
 
+  const { data: leadsReport } = useQuery({
+    queryKey: ["reports", "leads", start, end],
+    queryFn: () =>
+      apiFetch<LeadsReport>(
+        `/reports/leads?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+        { token }
+      ),
+    enabled: !!token && start <= end,
+  });
+
+  const { data: bookingsReport } = useQuery({
+    queryKey: ["reports", "bookings", start, end],
+    queryFn: () =>
+      apiFetch<BookingsReport>(
+        `/reports/bookings?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+        { token }
+      ),
+    enabled: !!token && start <= end,
+  });
+
+  const { data: payoutsReport } = useQuery({
+    queryKey: ["reports", "rafting", "payouts", start, end],
+    queryFn: () =>
+      apiFetch<InstructorPayoutsReport>(
+        `/reports/rafting/instructor-payouts?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+        { token }
+      ),
+    enabled: !!token && start <= end,
+  });
+
   const downloadCsv = async () => {
     if (!token || start > end) return;
     setCsvBusy(true);
@@ -102,33 +174,35 @@ export default function ReportsPage() {
   };
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Отчёты</h1>
+    <Stagger className="space-y-4">
+      <FadeUp>
+        <h1 className="text-2xl font-bold">Отчёты</h1>
+      </FadeUp>
 
-      <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4 mb-6 flex flex-wrap gap-4 items-end">
+      <FadeUp className="rounded-xl border border-slate-200 bg-white p-4 flex flex-wrap gap-4 items-end shadow-sm">
         <div>
-          <label className="block text-sm text-slate-400 mb-1">С начала</label>
+          <label className="block text-sm text-slate-600 mb-1">С начала</label>
           <input
             type="date"
             value={start}
             onChange={(e) => setStart(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+            className="px-3 py-2 rounded-lg bg-white border border-slate-300"
           />
         </div>
         <div>
-          <label className="block text-sm text-slate-400 mb-1">По</label>
+          <label className="block text-sm text-slate-600 mb-1">По</label>
           <input
             type="date"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+            className="px-3 py-2 rounded-lg bg-white border border-slate-300"
           />
         </div>
         <button
           type="button"
           onClick={() => refetch()}
           disabled={!token || start > end}
-          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white"
         >
           Обновить
         </button>
@@ -137,38 +211,50 @@ export default function ReportsPage() {
             type="button"
             onClick={() => downloadCsv()}
             disabled={!token || start > end || csvBusy}
-            className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 border border-slate-600"
+            className="px-4 py-2 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50 border border-slate-300"
           >
             {csvBusy ? "Файл…" : "Скачать CSV"}
           </button>
         )}
-      </div>
-      {csvError && <p className="text-red-400 text-sm mb-2">{csvError}</p>}
-
-      {start > end && (
-        <p className="text-amber-400 text-sm mb-4">Укажите дату начала не позже даты окончания.</p>
+      </FadeUp>
+      {csvError && (
+        <FadeUp>
+          <p className="text-red-400 text-sm">{csvError}</p>
+        </FadeUp>
       )}
 
-      {isLoading && <div className="text-slate-500">Загрузка...</div>}
+      {start > end && (
+        <FadeUp>
+          <p className="text-amber-400 text-sm">Укажите дату начала не позже даты окончания.</p>
+        </FadeUp>
+      )}
+
+      {isLoading && (
+        <FadeUp>
+          <div className="text-slate-500">Загрузка...</div>
+        </FadeUp>
+      )}
       {error && (
-        <div className="text-red-400">
-          {error instanceof Error ? error.message : "Ошибка загрузки"}
-        </div>
+        <FadeUp>
+          <div className="text-red-400">
+            {error instanceof Error ? error.message : "Ошибка загрузки"}
+          </div>
+        </FadeUp>
       )}
 
       {data && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
+            <FadeUp className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
               <div className="text-slate-400 text-sm">Выручка за период</div>
-              <div className="text-2xl font-semibold text-emerald-400 mt-1">
+              <div className="text-2xl font-semibold text-brandBlue-300 mt-1">
                 {Number(data.revenue_in_period).toLocaleString("ru")} ₽
               </div>
               <p className="text-xs text-slate-500 mt-2">
                 Сумма подтверждённых платежей по дате оплаты в выбранном диапазоне.
               </p>
-            </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
+            </FadeUp>
+            <FadeUp className="rounded-xl border border-slate-700 bg-slate-900/40 p-4" delay={0.04}>
               <div className="text-slate-400 text-sm">Задолженность (сейчас)</div>
               <div className="text-2xl font-semibold text-amber-400 mt-1">
                 {Number(data.outstanding_debt).toLocaleString("ru")} ₽
@@ -176,11 +262,11 @@ export default function ReportsPage() {
               <p className="text-xs text-slate-500 mt-2">
                 По неотменённым заказам (не зависит от дат выше).
               </p>
-            </div>
+            </FadeUp>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <div className="rounded-xl border border-slate-700 overflow-hidden">
+            <FadeUp className="rounded-xl border border-slate-700 overflow-hidden">
               <div className="bg-slate-800/50 px-4 py-2 text-sm font-medium">По способу оплаты</div>
               <table className="w-full text-sm">
                 <thead>
@@ -208,9 +294,9 @@ export default function ReportsPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </FadeUp>
 
-            <div className="rounded-xl border border-slate-700 overflow-hidden">
+            <FadeUp className="rounded-xl border border-slate-700 overflow-hidden" delay={0.04}>
               <div className="bg-slate-800/50 px-4 py-2 text-sm font-medium">По типу услуги</div>
               <table className="w-full text-sm">
                 <thead>
@@ -238,10 +324,115 @@ export default function ReportsPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </FadeUp>
           </div>
+
+          <div className="grid lg:grid-cols-3 gap-6">
+            <FadeUp className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+              <div className="bg-slate-50 px-4 py-2 text-sm font-medium border-b border-slate-200">
+                Заявки за период
+              </div>
+              <div className="p-4">
+                <div className="text-sm text-slate-600">
+                  Всего создано:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {leadsReport?.total_leads_created ?? 0}
+                  </span>
+                </div>
+                <div className="mt-3 space-y-1 text-sm">
+                  {(leadsReport?.by_status ?? []).map((r) => (
+                    <div key={r.status} className="flex justify-between">
+                      <span className="text-slate-600">{r.status}</span>
+                      <span className="font-mono text-slate-900">{r.count}</span>
+                    </div>
+                  ))}
+                  {(leadsReport?.by_status ?? []).length === 0 && (
+                    <div className="text-slate-500">Нет данных</div>
+                  )}
+                </div>
+              </div>
+            </FadeUp>
+
+            <FadeUp className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm lg:col-span-2" delay={0.04}>
+              <div className="bg-slate-50 px-4 py-2 text-sm font-medium border-b border-slate-200">
+                Бронирования: что и сколько (пересечение с периодом)
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 text-left">
+                    <th className="p-3">Актив</th>
+                    <th className="p-3">Категория</th>
+                    <th className="p-3 text-right">Броней</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(bookingsReport?.by_asset ?? []).slice(0, 20).map((r) => (
+                    <tr key={r.asset_id} className="border-t border-slate-200 hover:bg-slate-50">
+                      <td className="p-3">
+                        <span className="font-mono text-xs text-slate-500">{r.asset_code}</span>{" "}
+                        <span className="text-slate-900">{r.asset_name}</span>
+                      </td>
+                      <td className="p-3 text-slate-600">{r.category_name}</td>
+                      <td className="p-3 text-right font-mono">{r.bookings_count}</td>
+                    </tr>
+                  ))}
+                  {(bookingsReport?.by_asset ?? []).length === 0 && (
+                    <tr>
+                      <td className="p-3 text-slate-500" colSpan={3}>
+                        Нет данных
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              {bookingsReport && bookingsReport.by_asset.length > 20 && (
+                <div className="p-3 text-xs text-slate-500 border-t border-slate-200">
+                  Показаны топ-20, всего броней: {bookingsReport.total_bookings}
+                </div>
+              )}
+            </FadeUp>
+          </div>
+
+          <FadeUp className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm" delay={0.08}>
+            <div className="bg-slate-50 px-4 py-2 text-sm font-medium border-b border-slate-200">
+              Долги инструкторам (сплавы, подтверждено, не оплачено)
+            </div>
+            <div className="p-4 text-sm text-slate-600">
+              Итого к выплате:{" "}
+              <span className="font-semibold text-slate-900">
+                {Number(payoutsReport?.total_due ?? 0).toLocaleString("ru")} ₽
+              </span>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500 text-left">
+                  <th className="p-3">Инструктор</th>
+                  <th className="p-3 text-right">Сплавов</th>
+                  <th className="p-3 text-right">К выплате</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(payoutsReport?.rows ?? []).map((r) => (
+                  <tr key={r.instructor_id} className="border-t border-slate-200 hover:bg-slate-50">
+                    <td className="p-3 text-slate-900">{r.instructor_name}</td>
+                    <td className="p-3 text-right font-mono">{r.trips_count}</td>
+                    <td className="p-3 text-right font-mono">
+                      {Number(r.total_due).toLocaleString("ru")} ₽
+                    </td>
+                  </tr>
+                ))}
+                {(payoutsReport?.rows ?? []).length === 0 && (
+                  <tr>
+                    <td className="p-3 text-slate-500" colSpan={3}>
+                      Нет данных
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </FadeUp>
         </div>
       )}
-    </div>
+    </Stagger>
   );
 }

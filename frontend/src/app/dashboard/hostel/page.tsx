@@ -45,6 +45,9 @@ const statusLabels: Record<string, string> = {
   cancelled: "Отменено",
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export default function HostelPage() {
   const getToken = useAuthStore((s) => s.getToken);
   const token = getToken() ?? undefined;
@@ -88,8 +91,8 @@ export default function HostelPage() {
     queryFn: () => {
       const q = new URLSearchParams();
       if (filterRoomId) q.set("room_id", filterRoomId);
-      if (filterFrom) q.set("date_from", filterFrom);
-      if (filterTo) q.set("date_to", filterTo);
+      if (filterFrom && DATE_RE.test(filterFrom)) q.set("date_from", filterFrom);
+      if (filterTo && DATE_RE.test(filterTo)) q.set("date_to", filterTo);
       const suffix = q.toString() ? `?${q}` : "";
       return apiFetch<BookingRow[]>(`/hostel/bookings${suffix}`, { token });
     },
@@ -161,6 +164,23 @@ export default function HostelPage() {
     bookingForm.check_out &&
     guestRows.some((g) => g.full_name.trim());
 
+  const handleCreateBooking = () => {
+    const dealId = bookingForm.deal_id.trim();
+    if (dealId && !UUID_RE.test(dealId)) {
+      alert("Поле «Заказ (UUID)» должно содержать корректный UUID.");
+      return;
+    }
+    if (!DATE_RE.test(bookingForm.check_in) || !DATE_RE.test(bookingForm.check_out)) {
+      alert("Даты заезда/выезда должны быть в формате YYYY-MM-DD.");
+      return;
+    }
+    if (bookingForm.check_out <= bookingForm.check_in) {
+      alert("Дата выезда должна быть позже даты заезда.");
+      return;
+    }
+    createBooking.mutate();
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -182,7 +202,7 @@ export default function HostelPage() {
             onClick={() => setTab(key)}
             className={`px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === key
-                ? "border-emerald-500 text-emerald-400"
+                ? "border-brandBlue-600 text-brandBlue-300"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -233,7 +253,7 @@ export default function HostelPage() {
               <button
                 onClick={() => createRoom.mutate()}
                 disabled={createRoom.isPending || !roomForm.code.trim()}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
                 {createRoom.isPending ? "..." : "Добавить номер"}
               </button>
@@ -406,16 +426,16 @@ export default function HostelPage() {
               ))}
               <button
                 type="button"
-                className="text-sm text-emerald-400 hover:underline"
+                className="text-sm text-brandBlue-300 hover:underline"
                 onClick={() => setGuestRows((rows) => [...rows, { full_name: "", phone: "", id_document: "" }])}
               >
                 + ещё гость
               </button>
             </div>
             <button
-              onClick={() => createBooking.mutate()}
+              onClick={handleCreateBooking}
               disabled={createBooking.isPending || !canCreateBooking}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
             >
               {createBooking.isPending ? "..." : "Создать бронирование"}
             </button>

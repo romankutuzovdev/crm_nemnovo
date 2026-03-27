@@ -106,7 +106,7 @@ export default function AssetDetailPage() {
     return (
       <div className="space-y-2">
         <p className="text-red-400">Не удалось загрузить актив</p>
-        <Link href="/dashboard/assets" className="text-emerald-400 hover:underline">
+        <Link href="/dashboard/assets" className="text-brandBlue-700 hover:underline">
           К списку
         </Link>
       </div>
@@ -116,7 +116,7 @@ export default function AssetDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link href="/dashboard/assets" className="text-sm text-slate-400 hover:text-emerald-400">
+          <Link href="/dashboard/assets" className="text-sm text-slate-500 hover:text-brandBlue-700">
             ← Активы
           </Link>
           <h1 className="text-2xl font-bold mt-2">{asset.name}</h1>

@@ -36,6 +36,8 @@ class RaftingInstructorCreate(BaseSchema):
     full_name: str
     phone: str | None = None
     notes: str | None = None
+    payout_per_trip: float = Field(default=0, ge=0)
+    payout_per_guest: float = Field(default=0, ge=0)
     is_active: bool = True
 
 
@@ -43,6 +45,8 @@ class RaftingInstructorUpdate(BaseSchema):
     full_name: str | None = None
     phone: str | None = None
     notes: str | None = None
+    payout_per_trip: float | None = Field(default=None, ge=0)
+    payout_per_guest: float | None = Field(default=None, ge=0)
     is_active: bool | None = None
 
 
@@ -50,6 +54,8 @@ class RaftingInstructorResponse(UUIDSchema):
     full_name: str
     phone: str | None
     notes: str | None
+    payout_per_trip: float
+    payout_per_guest: float
     is_active: bool
     created_at: datetime
 
@@ -109,6 +115,9 @@ class RaftingTripResponse(UUIDSchema):
     trip_date: date
     guests_count: int
     status: str
+    instructor_fee: float | None = None
+    instructor_paid: bool = False
+    instructor_paid_at: datetime | None = None
     notes: str | None
     created_at: datetime
 

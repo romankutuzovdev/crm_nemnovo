@@ -70,6 +70,9 @@ export default function RentPage() {
     { catalog_item_id: "", title: "", quantity: "1", unit_price: "" },
   ]);
 
+  const isUuid = (v: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+
   const { data: catalog = [] } = useQuery({
     queryKey: ["rent", "catalog"],
     queryFn: () => apiFetch<CatalogRow[]>("/rent/catalog", { token }),
@@ -111,10 +114,19 @@ export default function RentPage() {
 
   const createOrder = useMutation({
     mutationFn: () => {
+      const dealIdRaw = orderForm.deal_id.trim();
+      if (dealIdRaw && !isUuid(dealIdRaw)) {
+        throw new Error("Поле «Заказ CRM (UUID)» заполнено неверно. Оставьте пустым или вставьте UUID.");
+      }
       const lines = lineRows
         .filter((r) => r.title.trim() && r.unit_price !== "")
         .map((r) => ({
-          catalog_item_id: r.catalog_item_id.trim() || null,
+          catalog_item_id: (() => {
+            const v = r.catalog_item_id.trim();
+            if (!v) return null;
+            if (!isUuid(v)) throw new Error("Выбран неверный catalog_item_id (ожидается UUID).");
+            return v;
+          })(),
           title: r.title.trim(),
           quantity: Number(r.quantity) || 1,
           unit_price: Number(r.unit_price),
@@ -124,7 +136,7 @@ export default function RentPage() {
         token,
         body: JSON.stringify({
           service_date: orderForm.service_date,
-          deal_id: orderForm.deal_id.trim() || null,
+          deal_id: dealIdRaw || null,
           notes: orderForm.notes.trim() || null,
           status: "pending",
           lines,
@@ -175,7 +187,7 @@ export default function RentPage() {
             onClick={() => setTab(key)}
             className={`px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === key
-                ? "border-emerald-500 text-emerald-400"
+                ? "border-brandBlue-600 text-brandBlue-700"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -212,7 +224,7 @@ export default function RentPage() {
               <button
                 onClick={() => createCatalog.mutate()}
                 disabled={createCatalog.isPending || !catForm.name.trim()}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
                 {createCatalog.isPending ? "..." : "Добавить в справочник"}
               </button>
@@ -281,24 +293,24 @@ export default function RentPage() {
             </button>
           </div>
 
-          <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4 space-y-3">
+          <div className="rounded-xl border border-brandBlue-700/50 bg-brandBlue-950/25 p-4 space-y-3">
             <h2 className="text-sm font-semibold text-slate-300">Новый заказ на дату</h2>
             <div className="grid gap-3 md:grid-cols-3">
               <input
                 type="date"
-                className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                className="px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                 value={orderForm.service_date}
                 onChange={(e) => setOrderForm((s) => ({ ...s, service_date: e.target.value }))}
               />
               <input
-                className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 md:col-span-2"
+                className="px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60 md:col-span-2"
                 placeholder="Заказ CRM (UUID, необязательно)"
                 value={orderForm.deal_id}
                 onChange={(e) => setOrderForm((s) => ({ ...s, deal_id: e.target.value }))}
               />
             </div>
             <input
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+              className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
               placeholder="Заметки"
               value={orderForm.notes}
               onChange={(e) => setOrderForm((s) => ({ ...s, notes: e.target.value }))}
@@ -308,7 +320,7 @@ export default function RentPage() {
               {lineRows.map((row, i) => (
                 <div key={i} className="grid gap-2 md:grid-cols-12 items-center">
                   <select
-                    className="md:col-span-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="md:col-span-3 px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                     value={row.catalog_item_id}
                     onChange={(e) => applyCatalogDefaults(i, e.target.value)}
                   >
@@ -320,7 +332,7 @@ export default function RentPage() {
                     ))}
                   </select>
                   <input
-                    className="md:col-span-4 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="md:col-span-4 px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                     placeholder="Наименование в заказе"
                     value={row.title}
                     onChange={(e) => {
@@ -330,7 +342,7 @@ export default function RentPage() {
                     }}
                   />
                   <input
-                    className="md:col-span-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="md:col-span-2 px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                     placeholder="Кол-во"
                     inputMode="numeric"
                     value={row.quantity}
@@ -341,7 +353,7 @@ export default function RentPage() {
                     }}
                   />
                   <input
-                    className="md:col-span-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="md:col-span-2 px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
                     placeholder="Цена"
                     inputMode="decimal"
                     value={row.unit_price}
@@ -355,7 +367,7 @@ export default function RentPage() {
               ))}
               <button
                 type="button"
-                className="text-sm text-emerald-400 hover:underline"
+                className="text-sm text-brandBlue-700 hover:underline"
                 onClick={() =>
                   setLineRows((rows) => [...rows, { catalog_item_id: "", title: "", quantity: "1", unit_price: "" }])
                 }
@@ -366,7 +378,7 @@ export default function RentPage() {
             <button
               onClick={() => createOrder.mutate()}
               disabled={createOrder.isPending || !canCreateOrder}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
             >
               {createOrder.isPending ? "..." : "Создать заказ"}
             </button>

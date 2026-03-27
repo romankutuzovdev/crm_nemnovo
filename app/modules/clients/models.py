@@ -61,7 +61,9 @@ class Client(Base):
     deals: Mapped[list["Deal"]] = relationship("Deal", back_populates="client")
 
     def __repr__(self) -> str:
-        return f"<Client {self.first_name} {self.last_name}>"
+        first_name = self.__dict__.get("first_name", "<detached>")
+        last_name = self.__dict__.get("last_name", "")
+        return f"<Client {first_name} {last_name}>"
 
 
 class ClientNote(Base):

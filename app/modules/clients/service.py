@@ -15,7 +15,7 @@ from app.modules.clients.schemas import (
     ClientNoteCreate,
     ClientUpdate,
 )
-from app.shared.enums import AuditAction
+from app.shared.enums import AuditAction, LeadSource
 from app.shared.utils import normalize_phone
 
 logger = structlog.get_logger()

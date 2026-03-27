@@ -157,7 +157,7 @@ export default function PaymentsPage() {
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <span>
                 <span className="text-slate-500">Номер:</span>{" "}
-                <Link className="text-emerald-400 hover:underline" href={`/dashboard/orders/${orderId}`}>
+                <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/orders/${orderId}`}>
                   {orderPreview.number}
                 </Link>
               </span>
@@ -215,7 +215,7 @@ export default function PaymentsPage() {
               type="button"
               onClick={() => createPayment.mutate()}
               disabled={!enabled || createPayment.isPending}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
             >
               {createPayment.isPending ? "Сохранение..." : "Добавить платеж"}
             </button>

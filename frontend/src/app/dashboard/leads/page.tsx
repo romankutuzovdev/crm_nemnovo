@@ -168,10 +168,10 @@ export default function LeadsPage() {
     if (commentModal) setCommentDraft(commentModal.comment ?? "");
   }, [commentModal]);
 
-  if (isLoading) return <div className="text-slate-500">Загрузка...</div>;
+  if (isLoading) return <div className="text-text-secondary">Загрузка...</div>;
   if (error)
     return (
-      <div className="text-red-400">
+      <div className="text-error">
         Ошибка: {error instanceof Error ? error.message : "Неизвестная ошибка"}
       </div>
     );
@@ -180,9 +180,9 @@ export default function LeadsPage() {
     <div>
       <h1 className="text-2xl font-bold mb-4">Заявки</h1>
       {leads.length > 0 ? (
-        <div className="rounded-xl border border-slate-700 overflow-x-auto">
+        <div className="rounded-xl border border-border overflow-x-auto bg-surface">
           <table className="w-full min-w-[960px]">
-            <thead className="bg-slate-800/50">
+            <thead className="bg-surface-hover">
               <tr>
                 <th className="text-left p-3 text-sm">Дата</th>
                 <th className="text-left p-3 text-sm">Источник</th>
@@ -198,7 +198,7 @@ export default function LeadsPage() {
               {leads.map((l) => {
                 const isConverted = l.status === "converted";
                 return (
-                  <tr key={l.id} className="border-t border-slate-700 hover:bg-slate-800/30">
+                  <tr key={l.id} className="border-t border-border hover:bg-surface-hover">
                     <td className="p-3 text-sm whitespace-nowrap">
                       {new Date(l.created_at).toLocaleString("ru")}
                     </td>
@@ -206,7 +206,7 @@ export default function LeadsPage() {
                     <td className="p-3 text-sm">
                       {l.client_id ? (
                         <Link
-                          className="text-emerald-400 hover:underline"
+                          className="text-primary hover:underline"
                           href={`/dashboard/clients/${l.client_id}`}
                         >
                           открыть
@@ -217,7 +217,7 @@ export default function LeadsPage() {
                         <button
                           type="button"
                           onClick={() => setAttachForLead(l)}
-                          className="text-amber-400 hover:underline text-sm"
+                          className="text-warning hover:underline text-sm"
                         >
                           Привязать
                         </button>
@@ -228,7 +228,7 @@ export default function LeadsPage() {
                         l.service_type ?? "—"
                       ) : (
                         <select
-                          className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm max-w-[140px]"
+                          className="bg-surface border border-border rounded px-2 py-1 text-sm max-w-[140px]"
                           value={l.service_type ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -250,10 +250,10 @@ export default function LeadsPage() {
                     </td>
                     <td className="p-3 text-sm">
                       {isConverted ? (
-                        <span className="text-slate-400">Конвертирована</span>
+                        <span className="text-text-secondary">Конвертирована</span>
                       ) : (
                         <select
-                          className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm"
+                          className="bg-surface border border-border rounded px-2 py-1 text-sm"
                           value={l.status}
                           onChange={(e) =>
                             updateLead.mutate({
@@ -273,12 +273,12 @@ export default function LeadsPage() {
                     </td>
                     <td className="p-3 text-sm">
                       {isConverted ? (
-                        <span className="text-slate-500">
+                        <span className="text-text-secondary">
                           {l.assigned_to ? assignMap[l.assigned_to] ?? "—" : "—"}
                         </span>
                       ) : (
                         <select
-                          className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm max-w-[160px]"
+                          className="bg-surface border border-border rounded px-2 py-1 text-sm max-w-[160px]"
                           value={l.assigned_to ?? ""}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -306,7 +306,7 @@ export default function LeadsPage() {
                         <button
                           type="button"
                           onClick={() => openComment(l)}
-                          className="text-emerald-400/90 hover:underline text-xs mt-1"
+                          className="text-primary hover:underline text-xs mt-1"
                         >
                           Изменить
                         </button>
@@ -316,19 +316,19 @@ export default function LeadsPage() {
                       {isConverted ? (
                         l.converted_deal_id ? (
                           <Link
-                            className="text-emerald-400 hover:underline"
+                            className="text-primary hover:underline"
                             href={`/dashboard/orders/${l.converted_deal_id}`}
                           >
                             Заказ
                           </Link>
                         ) : (
-                          <span className="text-slate-500">—</span>
+                          <span className="text-text-secondary">—</span>
                         )
                       ) : (
                         <button
                           onClick={() => convert.mutate(l)}
                           disabled={!l.client_id || convert.isPending}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm"
+                          className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-50 text-white text-sm"
                           title={!l.client_id ? "Сначала привяжите клиента" : ""}
                         >
                           {busyLeadId === l.id ? "..." : "В заказ"}
@@ -337,17 +337,17 @@ export default function LeadsPage() {
                       <button
                         type="button"
                         onClick={() => setAuditForLead(l)}
-                        className="ml-2 text-slate-300 hover:text-white text-xs underline underline-offset-2"
+                        className="ml-2 text-text-secondary hover:text-text text-xs underline underline-offset-2"
                       >
                         История
                       </button>
                       {convert.isError && busyLeadId === l.id && (
-                        <div className="text-red-400 text-xs mt-1">
+                        <div className="text-error text-xs mt-1">
                           {convert.error instanceof Error ? convert.error.message : "Ошибка"}
                         </div>
                       )}
                       {updateLead.isError && updateLead.variables?.leadId === l.id && (
-                        <div className="text-red-400 text-xs mt-1 max-w-[140px]">
+                        <div className="text-error text-xs mt-1 max-w-[140px]">
                           {updateLead.error instanceof Error ? updateLead.error.message : "Ошибка"}
                         </div>
                       )}
@@ -359,12 +359,12 @@ export default function LeadsPage() {
           </table>
         </div>
       ) : (
-        <p className="text-slate-500">Пока нет заявок</p>
+        <p className="text-text-secondary">Пока нет заявок</p>
       )}
       {convert.isSuccess && (
-        <div className="mt-4 text-slate-300">
+        <div className="mt-4 text-text-secondary">
           Заказ создан:{" "}
-          <Link className="text-emerald-400 hover:underline" href={`/dashboard/orders/${convert.data}`}>
+          <Link className="text-primary hover:underline" href={`/dashboard/orders/${convert.data}`}>
             открыть
           </Link>
         </div>
@@ -372,22 +372,22 @@ export default function LeadsPage() {
 
       {attachForLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
+          <div className="bg-surface border border-border rounded-xl p-6 max-w-md w-full shadow-xl">
             <h2 className="text-lg font-semibold mb-2">Привязать клиента</h2>
-            <p className="text-slate-400 text-sm mb-4">
+            <p className="text-text-secondary text-sm mb-4">
               Введите телефон или имя (от 2 символов), выберите клиента из списка.
             </p>
             <input
               type="search"
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 mb-3"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 mb-3"
               placeholder="Поиск..."
               value={clientSearch}
               onChange={(e) => setClientSearch(e.target.value)}
               autoFocus
             />
-            <ul className="max-h-48 overflow-y-auto border border-slate-700 rounded-lg divide-y divide-slate-700">
+            <ul className="max-h-48 overflow-y-auto border border-border rounded-lg divide-y divide-border">
               {clientSearch.trim().length < 2 && (
-                <li className="p-3 text-slate-500 text-sm">Введите минимум 2 символа</li>
+                <li className="p-3 text-text-secondary text-sm">Введите минимум 2 символа</li>
               )}
               {clientSearch.trim().length >= 2 &&
                 (clientSearchResults?.items?.length ? (
@@ -395,7 +395,7 @@ export default function LeadsPage() {
                     <li key={c.id}>
                       <button
                         type="button"
-                        className="w-full text-left p-3 hover:bg-slate-800 text-sm"
+                        className="w-full text-left p-3 hover:bg-surface-hover text-sm"
                         onClick={() =>
                           attachClient.mutate({ leadId: attachForLead.id, clientId: c.id })
                         }
@@ -404,23 +404,23 @@ export default function LeadsPage() {
                         <span className="font-medium">
                           {c.first_name} {c.last_name}
                         </span>
-                        <span className="text-slate-400 ml-2">{c.phone}</span>
+                        <span className="text-text-secondary ml-2">{c.phone}</span>
                       </button>
                     </li>
                   ))
                 ) : (
-                  <li className="p-3 text-slate-500 text-sm">Ничего не найдено</li>
+                  <li className="p-3 text-text-secondary text-sm">Ничего не найдено</li>
                 ))}
             </ul>
             {attachClient.isError && (
-              <p className="text-red-400 text-sm mt-2">
+              <p className="text-error text-sm mt-2">
                 {attachClient.error instanceof Error ? attachClient.error.message : "Ошибка"}
               </p>
             )}
             <div className="flex justify-end gap-2 mt-4">
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+                className="px-4 py-2 rounded-lg bg-surface-hover hover:bg-surface border border-border"
                 onClick={() => {
                   setAttachForLead(null);
                   setClientSearch("");
@@ -435,24 +435,24 @@ export default function LeadsPage() {
 
       {commentModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-xl">
+          <div className="bg-surface border border-border rounded-xl p-6 max-w-lg w-full shadow-xl">
             <h2 className="text-lg font-semibold mb-2">Комментарий к заявке</h2>
             <textarea
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 min-h-[120px] text-sm"
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 min-h-[120px] text-sm"
               value={commentDraft}
               onChange={(e) => setCommentDraft(e.target.value)}
             />
             <div className="flex justify-end gap-2 mt-4">
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+                className="px-4 py-2 rounded-lg bg-surface-hover hover:bg-surface border border-border"
                 onClick={() => setCommentModal(null)}
               >
                 Отмена
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-50 text-white"
                 disabled={updateLead.isPending}
                 onClick={() => {
                   updateLead.mutate(
@@ -475,20 +475,20 @@ export default function LeadsPage() {
 
       {auditForLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-3xl w-full shadow-xl">
+          <div className="bg-surface border border-border rounded-xl p-6 max-w-3xl w-full shadow-xl">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">История заявки</h2>
               <button
                 type="button"
                 onClick={() => setAuditForLead(null)}
-                className="text-slate-400 hover:text-slate-200"
+                className="text-text-secondary hover:text-text"
               >
                 ✕
               </button>
             </div>
-            <div className="rounded-lg border border-slate-700 overflow-hidden">
+            <div className="rounded-lg border border-border overflow-hidden">
               <table className="w-full">
-                <thead className="bg-slate-800/50">
+                <thead className="bg-surface-hover">
                   <tr>
                     <th className="text-left p-3 text-sm">Когда</th>
                     <th className="text-left p-3 text-sm">Действие</th>
@@ -498,18 +498,18 @@ export default function LeadsPage() {
                 </thead>
                 <tbody>
                   {(leadAudit ?? []).map((a) => (
-                    <tr key={a.id} className="border-t border-slate-700">
-                      <td className="p-3 text-sm text-slate-300 whitespace-nowrap">
+                    <tr key={a.id} className="border-t border-border">
+                      <td className="p-3 text-sm text-text-secondary whitespace-nowrap">
                         {new Date(a.created_at).toLocaleString("ru")}
                       </td>
                       <td className="p-3 text-sm">{a.action}</td>
-                      <td className="p-3 text-sm text-slate-300">{a.user_name}</td>
-                      <td className="p-3 text-sm text-slate-300">{a.details}</td>
+                      <td className="p-3 text-sm text-text-secondary">{a.user_name}</td>
+                      <td className="p-3 text-sm text-text-secondary">{a.details}</td>
                     </tr>
                   ))}
                   {(!leadAudit || leadAudit.length === 0) && (
-                    <tr className="border-t border-slate-700">
-                      <td className="p-3 text-slate-500 text-sm" colSpan={4}>
+                    <tr className="border-t border-border">
+                      <td className="p-3 text-text-secondary text-sm" colSpan={4}>
                         История пуста
                       </td>
                     </tr>

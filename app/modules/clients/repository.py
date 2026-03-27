@@ -10,15 +10,21 @@ from app.shared.base_repository import BaseRepository
 class ClientRepository(BaseRepository[Client]):
     model = Client
 
+    @staticmethod
+    def _response_load_options():
+        return (
+            selectinload(Client.company),
+        )
+
     async def find_by_phone(self, phone: str) -> Client | None:
         result = await self.session.execute(
-            select(Client).where(Client.phone == phone)
+            select(Client).options(*self._response_load_options()).where(Client.phone == phone)
         )
         return result.scalar_one_or_none()
 
     async def find_by_email(self, email: str) -> Client | None:
         result = await self.session.execute(
-            select(Client).where(Client.email == email)
+            select(Client).options(*self._response_load_options()).where(Client.email == email)
         )
         return result.scalar_one_or_none()
 
@@ -29,7 +35,7 @@ class ClientRepository(BaseRepository[Client]):
         offset: int = 0,
         limit: int = 50,
     ) -> list[Client]:
-        stmt = select(Client).where(
+        stmt = select(Client).options(*self._response_load_options()).where(
             or_(
                 Client.first_name.ilike(f"%{query}%"),
                 Client.last_name.ilike(f"%{query}%"),
@@ -62,6 +68,7 @@ class ClientRepository(BaseRepository[Client]):
     async def get_by_manager(self, manager_id: UUID, offset: int = 0, limit: int = 50) -> list[Client]:
         result = await self.session.execute(
             select(Client)
+            .options(*self._response_load_options())
             .where(Client.assigned_to == manager_id)
             .offset(offset)
             .limit(limit)
@@ -73,12 +80,23 @@ class ClientRepository(BaseRepository[Client]):
     ) -> list[Client]:
         result = await self.session.execute(
             select(Client)
+            .options(*self._response_load_options())
             .where(Client.company_id == company_id)
             .order_by(Client.last_name, Client.first_name)
             .offset(offset)
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def get_or_raise(self, obj_id: UUID) -> Client:
+        result = await self.session.execute(
+            select(Client).options(*self._response_load_options()).where(Client.id == obj_id)
+        )
+        obj = result.scalar_one_or_none()
+        if not obj:
+            from app.core.exceptions import NotFoundError
+            raise NotFoundError(f"{self.model.__name__} with id={obj_id} not found")
+        return obj
 
 
 class CompanyRepository(BaseRepository[Company]):

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Home() {
   const router = useRouter();
@@ -20,12 +21,15 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <h1 className="text-4xl font-bold mb-2">CRM Nemnovo</h1>
-      <p className="text-slate-400 mb-8">Система управления туристическим бизнесом</p>
+      <p className="text-text-secondary mb-8">Система управления туристическим бизнесом</p>
       <div className="flex gap-4">
         <Link
           href="/login"
-          className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium transition-colors"
+          className="px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors"
         >
           Войти
         </Link>

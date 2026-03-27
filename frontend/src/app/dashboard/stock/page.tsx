@@ -156,7 +156,7 @@ export default function StockPage() {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium whitespace-nowrap"
+            className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium whitespace-nowrap"
           >
             + Товар
           </button>
@@ -305,7 +305,7 @@ export default function StockPage() {
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
                 disabled={createProduct.isPending || !form.name.trim() || !form.sku.trim()}
                 onClick={() => createProduct.mutate()}
               >
@@ -362,7 +362,7 @@ export default function StockPage() {
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
                 disabled={adjustStock.isPending || Number(adjustDelta) === 0}
                 onClick={() => adjustStock.mutate()}
               >

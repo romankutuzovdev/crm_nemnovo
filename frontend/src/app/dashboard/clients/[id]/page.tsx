@@ -248,7 +248,7 @@ export default function ClientDetailsPage() {
             <div className="text-slate-400 text-sm">
               Компания:{" "}
               <Link
-                className="text-emerald-400 hover:underline"
+                className="text-brandBlue-300 hover:underline"
                 href={`/dashboard/companies/${client.company.id}`}
               >
                 {client.company.name}
@@ -316,7 +316,7 @@ export default function ClientDetailsPage() {
             onClick={() => setTab(key)}
             className={`px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === key
-                ? "border-emerald-500 text-emerald-400"
+                ? "border-brandBlue-600 text-brandBlue-300"
                 : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -374,7 +374,7 @@ export default function ClientDetailsPage() {
                 <button
                   onClick={() => updateClient.mutate()}
                   disabled={updateClient.isPending}
-                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
                 >
                   {updateClient.isPending ? "Сохранение..." : "Сохранить"}
                 </button>
@@ -421,7 +421,7 @@ export default function ClientDetailsPage() {
               {(orders?.items ?? []).map((o) => (
                 <tr key={o.id} className="border-t border-slate-700 hover:bg-slate-800/30">
                   <td className="p-4">
-                    <Link className="text-emerald-400 hover:underline" href={`/dashboard/orders/${o.id}`}>
+                    <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/orders/${o.id}`}>
                       {o.number}
                     </Link>
                   </td>
@@ -463,7 +463,7 @@ export default function ClientDetailsPage() {
                   <td className="p-4">{PAYMENT_METHOD_LABELS[p.method] ?? p.method}</td>
                   <td className="p-4">{PAYMENT_STATUS_LABELS[p.status] ?? p.status}</td>
                   <td className="p-4">
-                    <Link className="text-emerald-400 hover:underline" href={`/dashboard/orders/${p.deal_id}`}>
+                    <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/orders/${p.deal_id}`}>
                       {orderNumberById[p.deal_id] ?? p.deal_id.slice(0, 8) + "…"}
                     </Link>
                   </td>
@@ -515,7 +515,7 @@ export default function ClientDetailsPage() {
                   <td className="p-4">
                     {c.converted_deal_id ? (
                       <Link
-                        className="text-emerald-400 hover:underline"
+                        className="text-brandBlue-300 hover:underline"
                         href={`/dashboard/orders/${c.converted_deal_id}`}
                       >
                         {orderNumberById[c.converted_deal_id] ?? c.converted_deal_id.slice(0, 8) + "…"}
@@ -530,7 +530,7 @@ export default function ClientDetailsPage() {
                   <td className="p-4 text-sm">
                     {c.recording_url ? (
                       <a
-                        className="text-emerald-400 hover:underline"
+                        className="text-brandBlue-300 hover:underline"
                         href={c.recording_url}
                         target="_blank"
                         rel="noreferrer"
@@ -607,7 +607,7 @@ export default function ClientDetailsPage() {
               <button
                 onClick={() => addNote.mutate()}
                 disabled={!noteText.trim() || addNote.isPending}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
                 {addNote.isPending ? "..." : "Добавить"}
               </button>

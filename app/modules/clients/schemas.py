@@ -90,6 +90,16 @@ class ClientResponse(UUIDSchema):
     created_at: datetime
     updated_at: datetime
 
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_tags(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        # Legacy/corrupted JSON values in DB should not break list endpoint.
+        return []
+
 
 class ClientNoteCreate(BaseSchema):
     text: str

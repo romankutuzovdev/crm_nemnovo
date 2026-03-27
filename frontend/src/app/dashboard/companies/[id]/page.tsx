@@ -91,7 +91,7 @@ export default function CompanyDetailPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-slate-500 text-sm mb-1">
-            <Link href="/dashboard/companies" className="hover:text-emerald-400">
+            <Link href="/dashboard/companies" className="hover:text-brandBlue-300">
               ← Компании
             </Link>
           </p>
@@ -180,7 +180,7 @@ export default function CompanyDetailPage() {
                 type="button"
                 onClick={() => updateCompany.mutate()}
                 disabled={updateCompany.isPending || !edit.name.trim()}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
                 {updateCompany.isPending ? "Сохранение..." : "Сохранить"}
               </button>
@@ -239,7 +239,7 @@ export default function CompanyDetailPage() {
               {company.clients.map((c) => (
                 <tr key={c.id} className="border-t border-slate-700 hover:bg-slate-800/30">
                   <td className="p-4">
-                    <Link className="text-emerald-400 hover:underline" href={`/dashboard/clients/${c.id}`}>
+                    <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/clients/${c.id}`}>
                       {c.first_name} {c.last_name}
                     </Link>
                   </td>

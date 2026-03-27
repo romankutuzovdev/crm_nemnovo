@@ -230,19 +230,21 @@ async def seed_demo(session: AsyncSession) -> None:
         deal1, "Демо: сопровождение инструктора", Decimal("7000.00"), link_kayak=False
     )
 
-    # --- Bookings (asset booking slot) ---
-    start_dt = utcnow() + timedelta(days=3)
-    end_dt = start_dt + timedelta(hours=4)
+    # --- Bookings (фиксированный слот по deal.number — идемпотентно) ---
+    base_day = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(
+        days=3
+    )
 
-    async def ensure_booking(deal: Deal, start: datetime, end: datetime) -> None:
+    async def ensure_booking(deal: Deal, day_offset: int) -> None:
+        start = base_day + timedelta(days=day_offset)
+        end = start + timedelta(hours=4)
         q = await session.execute(
             select(Booking).where(
                 Booking.deal_id == deal.id,
                 Booking.asset_id == asset_k1.id,
-                Booking.start_datetime == start,
             )
         )
-        if q.scalar_one_or_none():
+        if q.scalars().first():
             return
         session.add(
             Booking(
@@ -256,8 +258,8 @@ async def seed_demo(session: AsyncSession) -> None:
         )
         print(f"  + бронирование актива для {deal.number}")
 
-    await ensure_booking(deal1, start_dt, end_dt)
-    await ensure_booking(deal2, start_dt + timedelta(days=1), end_dt + timedelta(days=1))
+    await ensure_booking(deal1, 0)
+    await ensure_booking(deal2, 1)
 
     # --- Payments ---
     async def ensure_payment(deal: Deal, ext: str, amount: Decimal) -> None:

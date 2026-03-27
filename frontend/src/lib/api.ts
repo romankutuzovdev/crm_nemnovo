@@ -1,8 +1,33 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_PREFIX = "/api/v1";
 
+/** Иначе при недоступном API кнопка «Войти» висит в «Вход...» без ошибки. */
+const FETCH_TIMEOUT_MS = 30_000;
+
 export function getApiUrl(path: string): string {
   return `${API_URL}${API_PREFIX}${path}`;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error(
+        `Нет ответа от API за ${FETCH_TIMEOUT_MS / 1000} с: ${url}. ` +
+          `Запустите бэкенд (uvicorn). Если открываете CRM не на этом компьютере, в frontend/.env.local укажите ` +
+          `NEXT_PUBLIC_API_URL с IP машины, где крутится API (не localhost). Сейчас: ${API_URL}`
+      );
+    }
+    throw new Error(
+      `Сеть: не удалось обратиться к API (${url}). Проверьте бэкенд и NEXT_PUBLIC_API_URL (сейчас: ${API_URL}).`,
+      { cause: e }
+    );
+  } finally {
+    clearTimeout(tid);
+  }
 }
 
 function handleError(res: Response, err: unknown) {
@@ -47,7 +72,7 @@ export async function apiFetch<T>(
   const doRequest = async (authToken: string | undefined): Promise<Response> => {
     const h = { ...headers } as Record<string, string>;
     if (authToken) h["Authorization"] = `Bearer ${authToken}`;
-    return fetch(getApiUrl(path), { ...fetchOptions, headers: h });
+    return fetchWithTimeout(getApiUrl(path), { ...fetchOptions, headers: h });
   };
 
   let res = await doRequest(token);
@@ -59,7 +84,7 @@ export async function apiFetch<T>(
     const refreshToken = state.refreshToken;
     if (refreshToken) {
       try {
-        const refreshRes = await fetch(getApiUrl("/auth/refresh"), {
+        const refreshRes = await fetchWithTimeout(getApiUrl("/auth/refresh"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refresh_token: refreshToken }),
