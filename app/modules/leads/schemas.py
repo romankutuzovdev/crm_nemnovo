@@ -34,6 +34,7 @@ class LeadCreate(BaseSchema):
     guests_count: int = 1
     comment: str | None = None
     assigned_to: UUID | None = None
+    excursion_guide_id: UUID | None = None
 
 
 class LeadUpdate(BaseSchema):
@@ -41,8 +42,36 @@ class LeadUpdate(BaseSchema):
     assigned_to: UUID | None = None
     service_type: ServiceType | None = None
     preferred_date: date | None = None
+    preferred_datetime: datetime | None = None
     guests_count: int | None = None
     comment: str | None = None
+    excursion_guide_id: UUID | None = None
+
+
+class LeadServiceItemBase(BaseSchema):
+    client_id: UUID | None = None
+    service_type: ServiceType
+    description: str
+    quantity: int = 1
+    unit_price: float = 0
+
+
+class LeadServiceItemCreate(LeadServiceItemBase):
+    pass
+
+
+class LeadServiceItemResponse(UUIDSchema):
+    lead_id: UUID
+    client_id: UUID | None = None
+    service_type: str
+    description: str
+    quantity: int
+    unit_price: float
+    created_at: datetime
+
+
+class LeadServiceItemsUpdate(BaseSchema):
+    items: list[LeadServiceItemCreate]
 
 
 class LeadAttachClient(BaseSchema):
@@ -60,12 +89,16 @@ class LeadResponse(UUIDSchema):
     status: str
     service_type: str | None
     preferred_date: date | None
+    preferred_datetime: datetime | None = None
     guests_count: int
     comment: str | None
     assigned_to: UUID | None
     converted_deal_id: UUID | None
+    excursion_guide_id: UUID | None = None
+    raw_payload: dict | None = None
     created_at: datetime
     updated_at: datetime
+    services: list[LeadServiceItemResponse] = []
 
 
 class LeadAuditEntryResponse(UUIDSchema):

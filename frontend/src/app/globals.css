@@ -68,6 +68,7 @@ body {
   .bg-slate-900\/50,
   .bg-slate-800,
   .bg-slate-800\/50,
+  .bg-slate-800\/40,
   .bg-slate-800\/30,
   .bg-slate-800\/20,
   .bg-slate-700 {
@@ -80,10 +81,15 @@ body {
     border-color: rgb(var(--border));
   }
 
-  .text-slate-500,
-  .text-slate-600,
+  /* Keep readable contrast in LIGHT theme:
+     - slate-200/300 are used as primary text in many pages
+     - slate-500/600 are secondary captions */
   .text-slate-200,
   .text-slate-300 {
+    color: rgb(var(--text));
+  }
+  .text-slate-500,
+  .text-slate-600 {
     color: rgb(var(--text-secondary));
   }
 

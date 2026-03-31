@@ -156,8 +156,9 @@ async def move_lead_event(
         return {"ok": False}
 
     start_dt = datetime.fromisoformat(data.start.replace("Z", "+00:00"))
-    # Меняем только предпочитаемую дату (логика слота в календаре — день)
-    lead.preferred_date = start_dt.date()
+    # UI sends local naive ISO. Keep lead.preferred_datetime as naive for consistency.
+    lead.preferred_datetime = start_dt.replace(tzinfo=None)
+    lead.preferred_date = lead.preferred_datetime.date()
     return {"ok": True}
 
 
@@ -351,14 +352,8 @@ async def create_calendar_multi_event(
         comment_lines.append(f"Договор (текст): {data.contract_text.strip()}")
     if data.contract_id:
         comment_lines.append(f"Договор (id в системе): {data.contract_id}")
-    comment_lines.append("Услуги / участники:")
-    for p, cid in zip(data.participants, participant_client_ids, strict=True):
-        c = await client_repo.get_or_raise(cid)
-        client_label = f"{c.first_name} {c.last_name}".strip()
-        comment_lines.append(
-            f"  • {client_label}: [{p.service.service_type.value}] {p.service.description} "
-            f"×{p.service.quantity} @ {p.service.unit_price}"
-        )
+    # Услуги храним структурно в lead_service_items (см. LeadService.create_from_calendar_multi),
+    # чтобы их можно было редактировать и видеть в истории. В комментарий не дублируем.
     comment_lines.append("Планируемые слоты:")
     for slot in data.slots:
         a = await asset_repo.get_or_raise(slot.asset_id)
@@ -378,6 +373,7 @@ async def create_calendar_multi_event(
         preferred_date=min_start.date(),
         comment=comment,
         raw_payload=raw_payload,
+        excursion_guide_id=data.excursion_guide_id,
         assigned_to=assigned_to,
         created_by=current_user.id,
     )

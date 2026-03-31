@@ -62,6 +62,7 @@ const SERVICE_OPTIONS: { value: string; label: string }[] = [
   { value: "rafting", label: "Сплав" },
   { value: "hostel", label: "Хостел" },
   { value: "rent", label: "Аренда" },
+  { value: "excursion", label: "Экскурсия" },
   { value: "combined", label: "Комбо" },
 ];
 

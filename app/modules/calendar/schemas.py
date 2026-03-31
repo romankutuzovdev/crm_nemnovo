@@ -111,6 +111,7 @@ class CalendarEventMultiCreate(BaseSchema):
     notes: str | None = None
     contract_id: UUID | None = None
     contract_text: str | None = None
+    excursion_guide_id: UUID | None = None
     participants: list[CalendarEventParticipantLine]
     slots: list[CalendarMultiSlotLine]
 

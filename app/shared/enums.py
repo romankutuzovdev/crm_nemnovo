@@ -26,6 +26,7 @@ class ServiceType(StrEnum):
     RAFTING = "rafting"
     HOSTEL = "hostel"
     RENT = "rent"
+    EXCURSION = "excursion"
     COMBINED = "combined"
 
 

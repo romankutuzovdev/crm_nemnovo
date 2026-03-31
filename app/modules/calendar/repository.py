@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -330,9 +330,12 @@ class CalendarRepository:
 
         lead_result = await self.session.execute(lead_stmt)
         for lead, client_row in lead_result.all():
-            ev_date = lead.preferred_date or lead.created_at.date()
-            ev_start = datetime.combine(ev_date, time(9, 0))
-            ev_end = datetime.combine(ev_date, time(10, 0))
+            if getattr(lead, "preferred_datetime", None):
+                ev_start = lead.preferred_datetime
+            else:
+                ev_date = lead.preferred_date or lead.created_at.date()
+                ev_start = datetime.combine(ev_date, time(9, 0))
+            ev_end = ev_start + timedelta(hours=1)
             if ev_start < start_dt or ev_end > end_dt:
                 continue
             st = lead.service_type or "заявка"

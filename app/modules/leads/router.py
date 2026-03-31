@@ -11,6 +11,7 @@ from app.modules.leads.schemas import (
     LeadAuditEntryResponse,
     LeadCreate,
     LeadResponse,
+    LeadServiceItemsUpdate,
     LeadUpdate,
 )
 from app.modules.leads.convert_schemas import LeadConvertToOrderRequest
@@ -59,7 +60,7 @@ async def get_lead(
     db: AsyncSession = Depends(get_db),
 ):
     service = LeadService(db)
-    lead = await service.repo.get_or_raise(lead_id)
+    lead = await service.repo.get_with_services_or_raise(lead_id)
     if current_user.role.name == "manager" and lead.assigned_to != current_user.id:
         from app.core.exceptions import ForbiddenError
         raise ForbiddenError("Access denied")
@@ -90,11 +91,42 @@ async def update_lead(
 ):
     service = LeadService(db)
     if current_user.role.name == "manager":
-        lead = await service.repo.get_or_raise(lead_id)
+        lead = await service.repo.get_with_services_or_raise(lead_id)
         if lead.assigned_to != current_user.id:
             from app.core.exceptions import ForbiddenError
             raise ForbiddenError("Access denied")
     return await service.update_lead(lead_id, data, updated_by=current_user.id)
+
+
+@router.put("/{lead_id}/services", response_model=LeadResponse)
+async def replace_lead_services(
+    lead_id: UUID,
+    data: LeadServiceItemsUpdate,
+    current_user=require_permission("leads", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = LeadService(db)
+    if current_user.role.name == "manager":
+        lead = await service.repo.get_with_services_or_raise(lead_id)
+        if lead.assigned_to != current_user.id:
+            from app.core.exceptions import ForbiddenError
+            raise ForbiddenError("Access denied")
+    return await service.set_lead_services(lead_id, data, updated_by=current_user.id)
+
+
+@router.post("/{lead_id}/services/import", response_model=LeadResponse)
+async def import_lead_services_from_payload(
+    lead_id: UUID,
+    current_user=require_permission("leads", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = LeadService(db)
+    if current_user.role.name == "manager":
+        lead = await service.repo.get_with_services_or_raise(lead_id)
+        if lead.assigned_to != current_user.id:
+            from app.core.exceptions import ForbiddenError
+            raise ForbiddenError("Access denied")
+    return await service.import_services_from_payload(lead_id, updated_by=current_user.id)
 
 
 @router.patch("/{lead_id}/attach-client", response_model=LeadResponse)

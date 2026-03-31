@@ -7,10 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import write_audit_log
 from app.core.exceptions import ValidationError
 from app.modules.clients.service import ClientService
-from app.modules.leads.models import Lead
+from app.modules.leads.models import Lead, LeadServiceItem
 from app.modules.leads.repository import LeadRepository
 from app.modules.users.repository import UserRepository
-from app.modules.leads.schemas import LeadAuditEntryResponse, LeadFromSiteCreate, LeadUpdate
+from app.modules.leads.schemas import (
+    LeadAuditEntryResponse,
+    LeadFromSiteCreate,
+    LeadServiceItemsUpdate,
+    LeadUpdate,
+)
 from app.modules.leads.convert_schemas import LeadConvertToOrderRequest
 from app.shared.enums import AuditAction, LeadSource, LeadStatus, ServiceType
 
@@ -81,6 +86,7 @@ class LeadService:
         preferred_date: date,
         comment: str,
         raw_payload: dict,
+        excursion_guide_id: UUID | None,
         assigned_to: UUID | None,
         created_by: UUID,
     ) -> Lead:
@@ -94,8 +100,33 @@ class LeadService:
             guests_count=guests_count,
             comment=comment,
             raw_payload=raw_payload,
+            excursion_guide_id=excursion_guide_id,
             assigned_to=assigned_to,
         )
+
+        # Store structured service items (so they are editable and auditable later).
+        participants = (raw_payload or {}).get("participants") or []
+        created_items = 0
+        for p in participants:
+            svc = (p or {}).get("service") or {}
+            if not svc:
+                continue
+            st = svc.get("service_type")
+            desc = svc.get("description")
+            if not st or not desc:
+                continue
+            self.session.add(
+                LeadServiceItem(
+                    lead_id=lead.id,
+                    client_id=p.get("client_id") or primary_client_id,
+                    service_type=str(st),
+                    description=str(desc),
+                    quantity=int(svc.get("quantity") or 1),
+                    unit_price=float(svc.get("unit_price") or 0),
+                )
+            )
+            created_items += 1
+
         await write_audit_log(
             self.session,
             created_by,
@@ -106,6 +137,7 @@ class LeadService:
                 "source": LeadSource.CALENDAR.value,
                 "preferred_date": preferred_date.isoformat(),
                 "client_id": str(primary_client_id),
+                "services_count": created_items,
             },
         )
         logger.info("lead.created_from_calendar", lead_id=str(lead.id))
@@ -122,8 +154,108 @@ class LeadService:
         )
         return lead
 
+    async def set_lead_services(self, lead_id: UUID, data: LeadServiceItemsUpdate, updated_by: UUID) -> Lead:
+        from app.modules.leads.models import LeadServiceItem
+        from sqlalchemy import delete
+
+        lead = await self.repo.get_with_services_or_raise(lead_id)
+        if lead.status == LeadStatus.CONVERTED:
+            raise ValidationError("Cannot modify a converted lead")
+
+        prev = [
+            {
+                "service_type": si.service_type,
+                "description": si.description,
+                "quantity": int(si.quantity),
+                "unit_price": float(si.unit_price),
+                "client_id": str(si.client_id) if si.client_id else None,
+            }
+            for si in (lead.service_items or [])
+        ]
+
+        await self.session.execute(delete(LeadServiceItem).where(LeadServiceItem.lead_id == lead_id))
+        for it in data.items:
+            self.session.add(
+                LeadServiceItem(
+                    lead_id=lead_id,
+                    client_id=it.client_id,
+                    service_type=str(it.service_type),
+                    description=it.description,
+                    quantity=int(it.quantity),
+                    unit_price=float(it.unit_price),
+                )
+            )
+
+        after_summary = {
+            "services_count": len(data.items),
+            "services": [
+                f"{it.service_type}:{it.quantity}x{it.description[:30]}" for it in data.items[:6]
+            ],
+        }
+        await write_audit_log(
+            self.session,
+            updated_by,
+            AuditAction.UPDATE,
+            "leads",
+            lead_id,
+            before={"services_count": len(prev)},
+            after=after_summary,
+        )
+        await self.session.flush()
+        return await self.repo.get_with_services_or_raise(lead_id)
+
+    async def import_services_from_payload(self, lead_id: UUID, updated_by: UUID) -> Lead:
+        """Backfill structured services for legacy leads from raw_payload (calendar multi)."""
+        from sqlalchemy import delete
+
+        lead = await self.repo.get_with_services_or_raise(lead_id)
+        if lead.status == LeadStatus.CONVERTED:
+            raise ValidationError("Cannot modify a converted lead")
+        if lead.service_items and len(lead.service_items) > 0:
+            return lead
+
+        payload = lead.raw_payload or {}
+        participants = payload.get("participants") or []
+        if not participants:
+            return lead
+
+        await self.session.execute(delete(LeadServiceItem).where(LeadServiceItem.lead_id == lead_id))
+        created = 0
+        for p in participants:
+            svc = (p or {}).get("service") or {}
+            st = svc.get("service_type")
+            desc = svc.get("description")
+            if not st or not desc:
+                continue
+            self.session.add(
+                LeadServiceItem(
+                    lead_id=lead_id,
+                    client_id=p.get("client_id") or lead.client_id,
+                    service_type=str(st),
+                    description=str(desc),
+                    quantity=int(svc.get("quantity") or 1),
+                    unit_price=float(svc.get("unit_price") or 0),
+                )
+            )
+            created += 1
+
+        if created:
+            await write_audit_log(
+                self.session,
+                updated_by,
+                AuditAction.UPDATE,
+                "leads",
+                lead_id,
+                after={"services_imported": created},
+            )
+        await self.session.flush()
+        return await self.repo.get_with_services_or_raise(lead_id)
+
     async def update_lead(self, lead_id: UUID, data: LeadUpdate, updated_by: UUID) -> Lead:
         update_data = data.model_dump(exclude_none=True)
+        # Keep preferred_date in sync with preferred_datetime for calendar UX.
+        if "preferred_datetime" in update_data and update_data.get("preferred_datetime") is not None:
+            update_data["preferred_date"] = update_data["preferred_datetime"].date()
 
         lead = await self.repo.get_or_raise(lead_id)
         if lead.status == LeadStatus.CONVERTED:

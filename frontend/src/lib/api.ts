@@ -53,6 +53,10 @@ function handleError(res: Response, err: unknown) {
   } else {
     msg = res.statusText;
   }
+  // Friendly conflict message fallback (e.g. "room occupied")
+  if (res.status === 409 && (!msg || msg === "Conflict")) {
+    msg = "Занято на выбранный период";
+  }
   throw new Error(msg);
 }
 

@@ -1,14 +1,28 @@
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
-from app.modules.leads.models import Lead
+from app.modules.leads.models import Lead, LeadServiceItem
 from app.shared.base_repository import BaseRepository
 from app.shared.enums import LeadStatus
 
 
 class LeadRepository(BaseRepository[Lead]):
     model = Lead
+
+    async def get_with_services_or_raise(self, lead_id):
+        result = await self.session.execute(
+            select(Lead)
+            .options(selectinload(Lead.service_items))
+            .where(Lead.id == lead_id)
+        )
+        lead = result.scalar_one_or_none()
+        if not lead:
+            from app.core.exceptions import NotFoundError
+
+            raise NotFoundError(f"Lead {lead_id} not found")
+        return lead
 
     async def find_by_source_ref(self, source: str, source_ref: str) -> Lead | None:
         result = await self.session.execute(

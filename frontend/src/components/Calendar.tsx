@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -56,8 +56,7 @@ interface ParticipantLineForm {
   new_first_name: string;
   new_last_name: string;
   new_phone: string;
-  new_email: string;
-  service_type: "rafting" | "hostel" | "rent" | "combined";
+  service_type: "rafting" | "hostel" | "rent" | "excursion" | "combined";
   catalog_item_id: string;
   description: string;
   quantity: number;
@@ -84,14 +83,22 @@ interface RentCatalogItem {
   name: string;
   description?: string | null;
   default_unit_price?: number | null;
+  is_active?: boolean;
 }
 
 interface ServiceCatalogOption {
   id: string;
-  service_type: "rafting" | "hostel" | "rent";
+  service_type: "rafting" | "hostel" | "rent" | "excursion";
   label: string;
   description: string;
   unit_price: number;
+}
+
+interface ExcursionGuideRow {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  is_active: boolean;
 }
 
 interface SelectedCalendarEvent {
@@ -138,6 +145,7 @@ interface LeadDetail {
   id: string;
   comment: string | null;
   preferred_date: string | null;
+  preferred_datetime?: string | null;
   service_type: string | null;
   guests_count: number;
 }
@@ -175,8 +183,13 @@ interface RaftingInstructorRow {
 interface TransportVehicleRow {
   id: string;
   name: string;
+  brand?: string;
+  model?: string | null;
   plate_number: string | null;
   seats: number | null;
+  organization?: string | null;
+  trip_cost?: number | null;
+  driver_details?: string | null;
   is_active: boolean;
 }
 
@@ -238,6 +251,7 @@ const SERVICE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "rafting", label: "Сплав" },
   { value: "hostel", label: "Хостел" },
   { value: "rent", label: "Аренда" },
+  { value: "excursion", label: "Экскурсия" },
   { value: "combined", label: "Комбо" },
 ];
 
@@ -256,6 +270,21 @@ const DEAL_STATUS_LABELS: Record<string, string> = {
   cancelled: "Отменён",
 };
 
+const SERVICE_TYPE_LABELS: Record<string, string> = {
+  rafting: "Сплав",
+  hostel: "Хостел",
+  rent: "Аренда",
+  excursion: "Экскурсия",
+  combined: "Комбо",
+  lead: "Заявка",
+  deal: "Заказ",
+};
+
+const GENERIC_STATUS_LABELS: Record<string, string> = {
+  ...DEAL_STATUS_LABELS,
+  pending: "Ожидает",
+};
+
 const ALLOWED_DEAL_STATUS_TRANSITIONS: Record<string, string[]> = {
   new: ["new", "confirmed", "cancelled"],
   confirmed: ["confirmed", "in_progress", "cancelled"],
@@ -268,6 +297,7 @@ export default function Calendar() {
   const getToken = useAuthStore((s) => s.getToken);
   const user = useAuthStore((s) => s.user);
   const isManagerRole = user?.role?.name === "manager";
+  const queryClient = useQueryClient();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [dateRange, setDateRange] = useState<{ start: Date; end: Date } | null>(null);
   const [managerFilter, setManagerFilter] = useState<string>("");
@@ -294,6 +324,8 @@ export default function Calendar() {
   const [participantLines, setParticipantLines] = useState<ParticipantLineForm[]>([]);
   const [slotLines, setSlotLines] = useState<SlotLineForm[]>([]);
   const [serviceCatalog, setServiceCatalog] = useState<ServiceCatalogOption[]>([]);
+  const [excursionGuides, setExcursionGuides] = useState<ExcursionGuideRow[]>([]);
+  const [newExcursionGuideId, setNewExcursionGuideId] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<SelectedCalendarEvent | null>(null);
   const [orderDetail, setOrderDetail] = useState<OrderSummary | null>(null);
   const [dealNotes, setDealNotes] = useState("");
@@ -306,7 +338,7 @@ export default function Calendar() {
   const [quickPaySaving, setQuickPaySaving] = useState(false);
   const [leadDetail, setLeadDetail] = useState<LeadDetail | null>(null);
   const [leadComment, setLeadComment] = useState("");
-  const [leadPreferredDate, setLeadPreferredDate] = useState("");
+  const [leadPreferredDateTime, setLeadPreferredDateTime] = useState("");
   const [leadServiceType, setLeadServiceType] = useState("");
   const [leadGuestsCount, setLeadGuestsCount] = useState(1);
   const [raftingTrip, setRaftingTrip] = useState<RaftingTripDetail | null>(null);
@@ -368,6 +400,7 @@ export default function Calendar() {
   const initEventForm = useCallback((startIso: string, endIso: string) => {
     setGuestsCount(1);
     setNotes("");
+    setNewExcursionGuideId("");
     setNewContractId("");
     setNewContractQuery("");
     setNewContractSuggestions([]);
@@ -380,7 +413,6 @@ export default function Calendar() {
         new_first_name: "",
         new_last_name: "",
         new_phone: "",
-        new_email: "",
         service_type: "rafting",
         catalog_item_id: "",
         description: "Услуга",
@@ -556,7 +588,7 @@ export default function Calendar() {
     if (!selectedEvent?.lead_id) {
       setLeadDetail(null);
       setLeadComment("");
-      setLeadPreferredDate("");
+      setLeadPreferredDateTime("");
       setLeadServiceType("");
       setLeadGuestsCount(1);
       setLeadLoading(false);
@@ -573,7 +605,14 @@ export default function Calendar() {
         if (cancelled) return;
         setLeadDetail(L);
         setLeadComment(L.comment ?? "");
-        setLeadPreferredDate(L.preferred_date?.slice(0, 10) ?? "");
+        const dt = (L.preferred_datetime ?? "").toString();
+        if (dt && dt.length >= 16) {
+          setLeadPreferredDateTime(dt.slice(0, 16));
+        } else if (L.preferred_date) {
+          setLeadPreferredDateTime(`${L.preferred_date.slice(0, 10)}T09:00`);
+        } else {
+          setLeadPreferredDateTime("");
+        }
         setLeadServiceType(L.service_type ?? "");
         setLeadGuestsCount(L.guests_count ?? 1);
       } catch (err) {
@@ -974,7 +1013,9 @@ export default function Calendar() {
         token,
         body: JSON.stringify({
           comment: leadComment.trim() ? leadComment.trim() : null,
-          preferred_date: leadPreferredDate.trim() ? leadPreferredDate : null,
+          preferred_datetime: leadPreferredDateTime.trim()
+            ? `${leadPreferredDateTime.trim()}:00`
+            : null,
           service_type: leadServiceType.trim() ? leadServiceType : null,
           guests_count: leadGuestsCount,
         }),
@@ -1008,8 +1049,16 @@ export default function Calendar() {
 
   const persistBookingRange = async (info: EventDropArg | EventResizeDoneArg) => {
     const id = info.event.id;
-    const start = info.event.start?.toISOString();
-    const end = info.event.end?.toISOString();
+    // FullCalendar gives Date in local timezone; backend expects naive timestamps for SQLite.
+    // Send local-time ISO without timezone to avoid UTC shifting.
+    const toLocalIso = (d: Date) => {
+      const tzOffsetMs = d.getTimezoneOffset() * 60_000;
+      return new Date(d.getTime() - tzOffsetMs).toISOString().slice(0, 19);
+    };
+    const startDate = info.event.start;
+    const endDate = info.event.end;
+    const start = startDate ? toLocalIso(startDate) : null;
+    const end = endDate ? toLocalIso(endDate) : null;
     if (!start || !end) {
       info.revert();
       return;
@@ -1104,6 +1153,13 @@ export default function Calendar() {
   const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!addDate || participantLines.length === 0 || slotLines.length === 0) return;
+    if (guestsCount < participantLines.length) {
+      alert(
+        `Гостей (всего) не может быть меньше количества участников (${participantLines.length}).`
+      );
+      setGuestsCount(participantLines.length);
+      return;
+    }
     for (const line of participantLines) {
       if (line.clientMode === "existing" && !line.client_id) {
         alert("Выберите клиента для каждого участника или укажите нового клиента.");
@@ -1129,10 +1185,11 @@ export default function Calendar() {
         method: "POST",
         token: getToken() ?? undefined,
         body: JSON.stringify({
-          guests_count: guestsCount,
+          guests_count: Math.max(guestsCount, participantLines.length),
           notes: notes || null,
           contract_id: newContractId.trim() ? newContractId.trim() : null,
           contract_text: newContractText.trim() ? newContractText.trim() : null,
+          excursion_guide_id: newExcursionGuideId.trim() ? newExcursionGuideId.trim() : null,
           participants: participantLines.map((line) => {
             const service = {
               service_type: line.service_type,
@@ -1146,7 +1203,6 @@ export default function Calendar() {
                   first_name: line.new_first_name.trim(),
                   last_name: line.new_last_name.trim(),
                   phone: line.new_phone.trim(),
-                  email: line.new_email.trim() || null,
                 },
                 service,
               };
@@ -1164,6 +1220,7 @@ export default function Calendar() {
       setShowAddModal(false);
       setAddDate(null);
       await refreshClients();
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
       if (dateRange) fetchEvents(dateRange.start, dateRange.end);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Ошибка создания");
@@ -1175,15 +1232,17 @@ export default function Calendar() {
       const token = getToken();
       if (!token) return;
       try {
-        const [clientsRes, assetsRes, roomsRes, rentCatalogRes] = await Promise.all([
+        const [clientsRes, assetsRes, roomsRes, rentCatalogRes, guidesRes] = await Promise.all([
           apiFetch<Paginated<Client>>("/clients/", { token }),
           apiFetch<Asset[] | Paginated<Asset>>("/assets/", { token }),
           apiFetch<HostelRoom[]>("/hostel/rooms?limit=200", { token }),
           apiFetch<RentCatalogItem[]>("/rent/catalog?limit=200", { token }),
+          apiFetch<ExcursionGuideRow[]>("/excursions/guides", { token }),
         ]);
         setClients((clientsRes as Paginated<Client>).items ?? []);
         const assetsList = Array.isArray(assetsRes) ? assetsRes : [];
         setAssets(assetsList);
+        setExcursionGuides((guidesRes ?? []).slice().sort((a, b) => a.full_name.localeCompare(b.full_name, "ru")));
         const raftingItems: ServiceCatalogOption[] = assetsList
           .filter((asset) => {
             const haystack = `${asset.name} ${asset.code} ${asset.category?.name ?? ""}`.toLowerCase();
@@ -1215,7 +1274,16 @@ export default function Calendar() {
           description: item.name,
           unit_price: Number(item.default_unit_price ?? 0),
         }));
-        setServiceCatalog([...raftingItems, ...hostelItems, ...rentItems]);
+        const excursionItems: ServiceCatalogOption[] = [
+          {
+            id: "excursion:default",
+            service_type: "excursion",
+            label: "Экскурсия",
+            description: "Экскурсия",
+            unit_price: 0,
+          },
+        ];
+        setServiceCatalog([...raftingItems, ...hostelItems, ...rentItems, ...excursionItems]);
       } catch {
         // ignore
       }
@@ -1320,6 +1388,7 @@ export default function Calendar() {
           eventDrop={handleEventDrop}
           eventResize={handleEventResize}
           editable={true}
+          eventAllow={(_dropInfo, _draggedEvent) => true}
           droppable={true}
           slotMinTime="06:00:00"
           slotMaxTime="23:00:00"
@@ -1384,6 +1453,29 @@ export default function Calendar() {
               </div>
 
               <div className="space-y-3">
+                <div>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                    Экскурсовод (для экскурсий)
+                  </label>
+                  <select
+                    value={newExcursionGuideId}
+                    onChange={(e) => setNewExcursionGuideId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  >
+                    <option value="">—</option>
+                    {excursionGuides
+                      .filter((g) => g.is_active)
+                      .map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.full_name}
+                          {g.phone ? ` — ${g.phone}` : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Можно оставить пустым. Поле сохраняется в заявке и потом редактируется.
+                  </p>
+                </div>
                 <div className="relative">
                   <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
                     Договор — поиск по номеру или компании
@@ -1461,7 +1553,6 @@ export default function Calendar() {
                           new_first_name: "",
                           new_last_name: "",
                           new_phone: "",
-                          new_email: "",
                           service_type: "rafting",
                           catalog_item_id: "",
                           description: "Услуга",
@@ -1568,19 +1659,6 @@ export default function Calendar() {
                             setParticipantLines((prev) =>
                               prev.map((row, i) =>
                                 i === idx ? { ...row, new_phone: e.target.value } : row
-                              )
-                            )
-                          }
-                          className="px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
-                        />
-                        <input
-                          placeholder="Email (необязательно)"
-                          type="email"
-                          value={line.new_email}
-                          onChange={(e) =>
-                            setParticipantLines((prev) =>
-                              prev.map((row, i) =>
-                                i === idx ? { ...row, new_email: e.target.value } : row
                               )
                             )
                           }
@@ -1884,19 +1962,22 @@ export default function Calendar() {
               {selectedEvent.service_types && selectedEvent.service_types.length > 0 ? (
                 <p>
                   <span className="text-slate-600 dark:text-slate-400">Услуги:</span>{" "}
-                  {selectedEvent.service_types.join(", ")}
+                  {selectedEvent.service_types
+                    .map((s) => SERVICE_TYPE_LABELS[s] ?? s)
+                    .join(", ")}
                 </p>
               ) : (
                 selectedEvent.service_type && (
                   <p>
                     <span className="text-slate-600 dark:text-slate-400">Услуга:</span>{" "}
-                    {selectedEvent.service_type}
+                    {SERVICE_TYPE_LABELS[selectedEvent.service_type] ?? selectedEvent.service_type}
                   </p>
                 )
               )}
               {selectedEvent.status && (
                 <p>
-                  <span className="text-slate-600 dark:text-slate-400">Статус:</span> {selectedEvent.status}
+                  <span className="text-slate-600 dark:text-slate-400">Статус:</span>{" "}
+                  {GENERIC_STATUS_LABELS[selectedEvent.status] ?? selectedEvent.status}
                 </p>
               )}
               {(selectedEvent.contract_number || selectedEvent.contract_company_name) && (
@@ -2151,6 +2232,13 @@ export default function Calendar() {
                 {leadDetail && (
                   <p className="text-xs text-slate-500">
                     <Link
+                      href={`/dashboard/leads/${selectedEvent.lead_id}`}
+                      className="text-brandBlue-600 dark:text-brandBlue-400 hover:underline"
+                    >
+                      Открыть заявку
+                    </Link>
+                    <span className="text-slate-400"> · </span>
+                    <Link
                       href="/dashboard/leads"
                       className="text-brandBlue-600 dark:text-brandBlue-400 hover:underline"
                     >
@@ -2169,11 +2257,13 @@ export default function Calendar() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Желаемая дата</label>
+                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                      Дата и время
+                    </label>
                     <input
-                      type="date"
-                      value={leadPreferredDate}
-                      onChange={(e) => setLeadPreferredDate(e.target.value)}
+                      type="datetime-local"
+                      value={leadPreferredDateTime}
+                      onChange={(e) => setLeadPreferredDateTime(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
                     />
                   </div>
@@ -2328,6 +2418,7 @@ export default function Calendar() {
                               <option key={v.id} value={v.id}>
                                 {v.name}
                                 {v.plate_number ? ` (${v.plate_number})` : ""}
+                                {v.seats ? ` — ${v.seats} мест` : ""}
                               </option>
                             ))}
                         </select>
