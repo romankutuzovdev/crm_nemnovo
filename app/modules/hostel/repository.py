@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -9,6 +9,15 @@ from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.modules.hostel.models import HostelBooking, HostelGuest, HostelRoom
 from app.shared.base_repository import BaseRepository
 from app.shared.enums import BookingStatus
+
+
+def compute_hostel_booking_total(
+    check_in: date, check_out: date, guests_count: int, price_per_person_per_night: float
+) -> float:
+    nights = (check_out - check_in).days
+    if nights < 1:
+        raise ValidationError("Нужна минимум одна ночь")
+    return round(float(guests_count) * nights * float(price_per_person_per_night), 2)
 
 
 class HostelRoomRepository(BaseRepository[HostelRoom]):
@@ -88,6 +97,8 @@ class HostelBookingRepository(BaseRepository[HostelBooking]):
         deal_id: UUID | None,
         check_in: date,
         check_out: date,
+        guests_count: int,
+        price_per_person_per_night: float,
         total_amount: float,
         status: str,
         notes: str | None,
@@ -100,6 +111,8 @@ class HostelBookingRepository(BaseRepository[HostelBooking]):
             deal_id=deal_id,
             check_in=check_in,
             check_out=check_out,
+            guests_count=guests_count,
+            price_per_person_per_night=price_per_person_per_night,
             total_amount=total_amount,
             status=status,
             notes=notes,
@@ -129,6 +142,8 @@ class HostelBookingRepository(BaseRepository[HostelBooking]):
         if await self.has_overlap(new_room, new_in, new_out, exclude_booking_id=booking_id):
             raise ConflictError("Номер занят на выбранные даты")
 
+        manual_total = raw["total_amount"] if "total_amount" in raw else None
+
         if "room_id" in raw:
             booking.room_id = raw["room_id"]
         if "deal_id" in raw:
@@ -137,8 +152,10 @@ class HostelBookingRepository(BaseRepository[HostelBooking]):
             booking.check_in = raw["check_in"]
         if "check_out" in raw:
             booking.check_out = raw["check_out"]
-        if "total_amount" in raw:
-            booking.total_amount = raw["total_amount"]
+        if "guests_count" in raw:
+            booking.guests_count = raw["guests_count"]
+        if "price_per_person_per_night" in raw:
+            booking.price_per_person_per_night = raw["price_per_person_per_night"]
         if "status" in raw:
             booking.status = raw["status"]
         if "notes" in raw:
@@ -148,6 +165,8 @@ class HostelBookingRepository(BaseRepository[HostelBooking]):
             guests = raw["guests"]
             if not guests:
                 raise ValidationError("Добавьте хотя бы одного гостя")
+            if booking.guests_count < len(guests):
+                raise ValidationError("Число проживающих не меньше количества записей гостей")
             await self.session.execute(delete(HostelGuest).where(HostelGuest.booking_id == booking_id))
             for g in guests:
                 self.session.add(
@@ -159,5 +178,23 @@ class HostelBookingRepository(BaseRepository[HostelBooking]):
                     )
                 )
 
+        if manual_total is not None:
+            booking.total_amount = manual_total
+        elif booking.price_per_person_per_night is not None and any(
+            k in raw for k in ("check_in", "check_out", "guests_count", "price_per_person_per_night")
+        ):
+            booking.total_amount = compute_hostel_booking_total(
+                booking.check_in,
+                booking.check_out,
+                booking.guests_count,
+                float(booking.price_per_person_per_night),
+            )
+
         await self.session.flush()
+        guest_row_count = await self.session.scalar(
+            select(func.count()).select_from(HostelGuest).where(HostelGuest.booking_id == booking_id)
+        )
+        if guest_row_count and booking.guests_count < int(guest_row_count):
+            raise ValidationError("Число проживающих не меньше количества записей гостей")
+
         return await self.get_with_guests_or_raise(booking_id)

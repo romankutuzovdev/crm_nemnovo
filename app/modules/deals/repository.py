@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from app.modules.contracts.models import Contract
 from app.modules.deals.models import Deal, DealItem
 from app.shared.base_repository import BaseRepository
 from app.shared.enums import DealStatus
@@ -18,8 +19,9 @@ class DealRepository(BaseRepository[Deal]):
         return (
             selectinload(Deal.client),
             selectinload(Deal.assigned_user),
-            selectinload(Deal.items),
+            selectinload(Deal.items).selectinload(DealItem.item_client),
             selectinload(Deal.bookings),
+            selectinload(Deal.contract).selectinload(Contract.company),
         )
 
     async def list(
@@ -83,6 +85,32 @@ class DealRepository(BaseRepository[Deal]):
             .offset(offset).limit(limit)
         )
         return list(result.scalars().all())
+
+    async def list_pending_approval(self, offset: int = 0, limit: int = 50) -> List[Deal]:
+        """Новые заказы без ответственного — очередь на подтверждение менеджером."""
+        result = await self.session.execute(
+            select(Deal)
+            .options(*self._response_load_options())
+            .where(
+                Deal.status == DealStatus.NEW.value,
+                Deal.assigned_to.is_(None),
+            )
+            .order_by(Deal.created_at.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def count_pending_approval(self) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Deal)
+            .where(
+                Deal.status == DealStatus.NEW.value,
+                Deal.assigned_to.is_(None),
+            )
+        )
+        return int(result.scalar_one())
 
     async def count_open_deals_for_manager(self, manager_id: UUID) -> int:
         """Активные сделки менеджера: new / confirmed / in_progress."""

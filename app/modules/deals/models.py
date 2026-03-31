@@ -6,7 +6,7 @@ from app.db.types import GUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from app.shared.enums import DealStatus, PaymentStatus, ServiceType
+from app.shared.enums import DealItemKind, DealStatus, PaymentStatus, ServiceType
 
 
 def utcnow() -> datetime:
@@ -38,6 +38,12 @@ class Deal(Base):
         String(30), default=PaymentStatus.UNPAID, nullable=False, index=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    contract_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    contract_text: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # произвольный текст (номер вне справочника, уточнение)
     created_by: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -50,6 +56,7 @@ class Deal(Base):
     bookings: Mapped[list["Booking"]] = relationship("Booking", back_populates="deal")
     payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="deal")
     client: Mapped["Client"] = relationship("Client", back_populates="deals")
+    contract = relationship("Contract", back_populates="deals", foreign_keys=[contract_id])
     assigned_user: Mapped["User | None"] = relationship(
         "User",
         foreign_keys=[assigned_to],
@@ -78,6 +85,18 @@ class Deal(Base):
     @property
     def debt_amount(self) -> float:
         return float(self.total_amount) - float(self.paid_amount)
+
+    @property
+    def contract_number(self) -> str | None:
+        c = self.contract
+        return c.number if c else None
+
+    @property
+    def contract_company_name(self) -> str | None:
+        c = self.contract
+        if c is None or c.company is None:
+            return None
+        return c.company.name
 
     def recalculate_payment_status(self) -> None:
         paid = float(self.paid_amount)
@@ -109,6 +128,9 @@ class DealItem(Base):
     deal_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("deals.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     asset_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
     )
@@ -116,11 +138,27 @@ class DealItem(Base):
         GUID(), ForeignKey("products.id", ondelete="SET NULL"), nullable=True
     )
     description: Mapped[str] = mapped_column(String(500), nullable=False)
+    item_kind: Mapped[str] = mapped_column(
+        String(20), default=DealItemKind.PRIMARY, nullable=False, index=True
+    )
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     total_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
 
     deal: Mapped[Deal] = relationship("Deal", back_populates="items")
+    item_client: Mapped["Client | None"] = relationship(
+        "Client",
+        foreign_keys=[client_id],
+    )
+
+    @property
+    def client_name(self) -> str | None:
+        if self.client_id is None:
+            return None
+        c = self.item_client
+        if c is None:
+            return None
+        return f"{c.first_name} {c.last_name}".strip()
 
 
 OrderItem = DealItem

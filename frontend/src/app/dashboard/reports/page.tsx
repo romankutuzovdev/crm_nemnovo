@@ -176,7 +176,12 @@ export default function ReportsPage() {
   return (
     <Stagger className="space-y-4">
       <FadeUp>
-        <h1 className="text-2xl font-bold">Отчёты</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Отчёты</h1>
+          <p className="text-slate-600 text-sm mt-1 max-w-3xl leading-snug">
+            Сводка за период: выручка, долги, разрезы по способам оплаты и типам услуг; заявки; загрузка активов; долги перед инструкторами по сплавам. Выберите даты и нажмите «Обновить».
+          </p>
+        </div>
       </FadeUp>
 
       <FadeUp className="rounded-xl border border-slate-200 bg-white p-4 flex flex-wrap gap-4 items-end shadow-sm">

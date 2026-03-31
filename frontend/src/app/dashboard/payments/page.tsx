@@ -128,7 +128,10 @@ export default function PaymentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Оплаты</h1>
+      <h1 className="text-2xl font-bold">Оплаты</h1>
+      <p className="text-slate-400 text-sm mt-1 mb-4 max-w-3xl leading-snug">
+        Найдите заказ по читаемому номеру или UUID, внесите платеж (наличные, карта, перевод, онлайн). Список ниже — история по выбранному заказу; баланс и долг подтягиваются из карточки заказа.
+      </p>
 
       <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4 mb-6 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">

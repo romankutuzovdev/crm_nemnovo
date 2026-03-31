@@ -7,19 +7,51 @@ import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
 const TILES: { href: string; title: string; description: string }[] = [
-  { href: "/dashboard/calendar", title: "Календарь", description: "Бронирования и загрузка ресурсов" },
-  { href: "/dashboard/leads", title: "Заявки", description: "Входящие лиды и конвертация в заказ" },
-  { href: "/dashboard/clients", title: "Клиенты", description: "Контакты, поиск и карточки" },
-  { href: "/dashboard/companies", title: "Компании", description: "Юрлица и тип B2B/B2C" },
-  { href: "/dashboard/orders", title: "Заказы", description: "Суммы, статусы, ответственный" },
-  { href: "/dashboard/rafting", title: "Сплавы", description: "Маршруты, инструкторы, транспорт" },
-  { href: "/dashboard/hostel", title: "Хостел", description: "Номера и бронирования с гостями" },
+  {
+    href: "/dashboard/calendar",
+    title: "Календарь",
+    description: "Мероприятия (участники и услуги), брони активов, перенос по времени",
+  },
+  {
+    href: "/dashboard/leads",
+    title: "Заявки",
+    description: "Лиды с сайта и телефонии: статусы, привязка к клиенту, в заказ",
+  },
+  { href: "/dashboard/clients", title: "Клиенты", description: "Карточки физлиц, поиск, связь с заказами" },
+  { href: "/dashboard/companies", title: "Компании", description: "Юрлица, сегмент B2B/B2C, контрагенты" },
+  {
+    href: "/dashboard/orders",
+    title: "Заказы",
+    description: "Список сделок: суммы, статусы, оплата, ответственный, создание",
+  },
+  {
+    href: "/dashboard/rafting",
+    title: "Сплавы",
+    description: "Справочники, транспорт, заказы сплава (время, цена, выплата ИП)",
+  },
+  {
+    href: "/dashboard/hostel",
+    title: "Хостел",
+    description: "Номера; брони: проживающие, ночи, цена/чел/ночь, гости",
+  },
   { href: "/dashboard/rent", title: "Аренда", description: "Беседки: справочник и заказ на дату" },
-  { href: "/dashboard/payments", title: "Оплаты", description: "Платежи и задолженность по заказам" },
-  { href: "/dashboard/assets", title: "Активы", description: "Каталог и ресурсы для бронирований" },
-  { href: "/dashboard/stock", title: "Склад", description: "Товары и остатки" },
-  { href: "/dashboard/reports", title: "Отчёты", description: "Выручка и сводки" },
-  { href: "/dashboard/settings", title: "Настройки", description: "Параметры системы" },
+  {
+    href: "/dashboard/payments",
+    title: "Оплаты",
+    description: "Поиск заказа и регистрация платежей; история по заказу",
+  },
+  {
+    href: "/dashboard/assets",
+    title: "Активы",
+    description: "Ресурсы под брони и слоты в календаре, не склад",
+  },
+  { href: "/dashboard/stock", title: "Склад", description: "Товарный учёт и движения по складу" },
+  {
+    href: "/dashboard/reports",
+    title: "Отчёты",
+    description: "Выручка, долги, услуги, лиды, сплавы (ИП), загрузка активов",
+  },
+  { href: "/dashboard/settings", title: "Настройки", description: "Webhooks, SMS, эквайринг — для админов" },
 ];
 
 function toIsoDate(d: Date): string {

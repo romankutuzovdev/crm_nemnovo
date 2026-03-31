@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 import structlog
@@ -11,7 +12,7 @@ from app.modules.leads.repository import LeadRepository
 from app.modules.users.repository import UserRepository
 from app.modules.leads.schemas import LeadAuditEntryResponse, LeadFromSiteCreate, LeadUpdate
 from app.modules.leads.convert_schemas import LeadConvertToOrderRequest
-from app.shared.enums import AuditAction, LeadSource, LeadStatus
+from app.shared.enums import AuditAction, LeadSource, LeadStatus, ServiceType
 
 logger = structlog.get_logger()
 
@@ -70,6 +71,44 @@ class LeadService:
         from app.workers.tasks.sms import notify_new_lead
         notify_new_lead.delay(str(lead.id))
 
+        return lead
+
+    async def create_from_calendar_multi(
+        self,
+        *,
+        primary_client_id: UUID,
+        guests_count: int,
+        preferred_date: date,
+        comment: str,
+        raw_payload: dict,
+        assigned_to: UUID | None,
+        created_by: UUID,
+    ) -> Lead:
+        """Заявка из формы календаря «мероприятие» (без заказа и бронирований до конвертации)."""
+        lead = await self.repo.create(
+            client_id=primary_client_id,
+            source=LeadSource.CALENDAR,
+            status=LeadStatus.NEW,
+            service_type=ServiceType.COMBINED,
+            preferred_date=preferred_date,
+            guests_count=guests_count,
+            comment=comment,
+            raw_payload=raw_payload,
+            assigned_to=assigned_to,
+        )
+        await write_audit_log(
+            self.session,
+            created_by,
+            AuditAction.CREATE,
+            "leads",
+            lead.id,
+            after={
+                "source": LeadSource.CALENDAR.value,
+                "preferred_date": preferred_date.isoformat(),
+                "client_id": str(primary_client_id),
+            },
+        )
+        logger.info("lead.created_from_calendar", lead_id=str(lead.id))
         return lead
 
     async def attach_client(self, lead_id: UUID, client_id: UUID, updated_by: UUID) -> Lead:
@@ -135,9 +174,12 @@ class LeadService:
         order_service = OrderService(self.session)
         order = await order_service.create_order(order_data, created_by=created_by)
 
-        # приоритет: явный assigned_to из запроса
+        # приоритет: явный assigned_to из запроса (persist в БД)
         if data.assigned_to:
-            order.assigned_to = data.assigned_to
+            from app.modules.deals.repository import DealRepository
+
+            deal_repo = DealRepository(self.session)
+            order = await deal_repo.update(order.id, assigned_to=data.assigned_to)
 
         # lead -> converted + связь
         lead.status = LeadStatus.CONVERTED

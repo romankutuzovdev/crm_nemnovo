@@ -76,7 +76,7 @@ class ClientService:
 
     async def update_client(self, client_id: UUID, data: ClientUpdate, updated_by: UUID) -> Client:
         client = await self.repo.get_or_raise(client_id)
-        update_data = data.model_dump(exclude_none=True)
+        update_data = data.model_dump(exclude_unset=True, mode="python")
 
         async with self.session.begin():
             client = await self.repo.update(client_id, **update_data)

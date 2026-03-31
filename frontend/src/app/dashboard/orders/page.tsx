@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 interface Order {
   id: string;
@@ -61,10 +62,26 @@ function formatDateRu(iso: string): string {
   return d.toLocaleDateString("ru");
 }
 
+const ROLES_PENDING_QUEUE = new Set(["admin", "director", "manager"]);
+
 export default function OrdersPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const getToken = useAuthStore((s) => s.getToken);
+  const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
   const token = getToken() ?? undefined;
+  const canSeePendingQueue = ROLES_PENDING_QUEUE.has(user?.role?.name ?? "");
+
+  const listView = useMemo(() => {
+    if (!canSeePendingQueue) return "all" as const;
+    return searchParams.get("view") === "pending" ? ("pending" as const) : ("all" as const);
+  }, [canSeePendingQueue, searchParams]);
+
+  const setListView = (v: "all" | "pending") => {
+    if (v === "pending") router.replace("/dashboard/orders?view=pending");
+    else router.replace("/dashboard/orders");
+  };
   const [showCreate, setShowCreate] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [debouncedClientSearch, setDebouncedClientSearch] = useState("");
@@ -92,11 +109,11 @@ export default function OrdersPage() {
   const clientPickList = clientPickData?.items ?? [];
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () =>
-      apiFetch<Paginated<Order>>("/orders/", {
-        token,
-      }),
+    queryKey: ["orders", listView],
+    queryFn: () => {
+      const suffix = listView === "pending" ? "?pending_approval=true" : "";
+      return apiFetch<Paginated<Order>>(`/orders/${suffix}`, { token });
+    },
     enabled: !!getToken(),
   });
   const orders = data?.items ?? [];
@@ -118,6 +135,8 @@ export default function OrdersPage() {
           items: [
             {
               description: "Заказ",
+              client_id: selectedClient!.id,
+              item_kind: "primary",
               quantity: 1,
               unit_price: Number(amount),
               asset_id: null,
@@ -148,10 +167,21 @@ export default function OrdersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Заказы</h1>
-          <p className="text-slate-500 text-sm mt-1">Всего в списке: {total}</p>
+          <p className="text-slate-500 text-sm mt-1">
+            {listView === "pending"
+              ? `В очереди на подтверждение: ${total}`
+              : `Всего в списке: ${total}`}
+          </p>
+          <p className="text-slate-400 text-xs mt-2 max-w-3xl leading-snug">
+            Единый список сделок CRM (сплав, хостел, аренда, комбо): статусы, оплата, ответственный. Сложное мероприятие с разными клиентами удобнее создавать в{" "}
+            <Link href="/dashboard/calendar" className="text-brandBlue-300 hover:underline">
+              календаре
+            </Link>
+            .
+          </p>
         </div>
         <button
           type="button"
@@ -165,6 +195,41 @@ export default function OrdersPage() {
           + Новый заказ
         </button>
       </div>
+
+      {canSeePendingQueue && (
+        <div className="flex gap-2 mb-4 border-b border-slate-700">
+          <button
+            type="button"
+            onClick={() => setListView("all")}
+            className={`px-4 py-2 -mb-px border-b-2 text-sm font-medium transition-colors ${
+              listView === "all"
+                ? "border-brandBlue-600 text-brandBlue-300"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Все заказы
+          </button>
+          <button
+            type="button"
+            onClick={() => setListView("pending")}
+            className={`px-4 py-2 -mb-px border-b-2 text-sm font-medium transition-colors ${
+              listView === "pending"
+                ? "border-amber-500 text-amber-200"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            На подтверждение
+          </button>
+        </div>
+      )}
+
+      {listView === "all" && (
+        <p className="text-slate-500 text-sm mb-4">
+          Новый заказ создаётся без ответственного и попадает во вкладку «На подтверждение» — менеджер подтверждает и
+          ведёт заказ дальше.
+        </p>
+      )}
+
       {orders.length > 0 ? (
         <div className="rounded-xl border border-slate-700 overflow-x-auto">
           <table className="w-full min-w-[900px]">
@@ -218,7 +283,9 @@ export default function OrdersPage() {
           </table>
         </div>
       ) : (
-        <p className="text-slate-500">Пока нет заказов</p>
+        <p className="text-slate-500">
+          {listView === "pending" ? "Нет заказов, ожидающих подтверждения" : "Пока нет заказов"}
+        </p>
       )}
 
       {showCreate && (

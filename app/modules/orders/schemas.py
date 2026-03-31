@@ -7,6 +7,7 @@ from app.modules.deals.schemas import (  # Совместимость: данн�
     DealCreate as OrderCreate,
     DealItemCreate as OrderItemCreate,
     DealItemResponse as OrderItemResponse,
+    DealItemUpdate as OrderItemUpdate,
     DealResponse as OrderResponse,
     DealUpdate as OrderUpdate,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "OrderCreate",
     "OrderItemCreate",
     "OrderItemResponse",
+    "OrderItemUpdate",
     "OrderResponse",
     "OrderAuditEntryResponse",
     "OrderUpdate",

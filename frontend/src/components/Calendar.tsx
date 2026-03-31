@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -42,7 +43,20 @@ interface Paginated<T> {
   items: T[];
 }
 
-interface ServiceLineForm {
+interface ContractRow {
+  id: string;
+  number: string;
+  title: string | null;
+  company_name: string;
+}
+
+interface ParticipantLineForm {
+  clientMode: "existing" | "new";
+  client_id: string;
+  new_first_name: string;
+  new_last_name: string;
+  new_phone: string;
+  new_email: string;
   service_type: "rafting" | "hostel" | "rent" | "combined";
   catalog_item_id: string;
   description: string;
@@ -79,15 +93,52 @@ interface ServiceCatalogOption {
   unit_price: number;
 }
 
-interface EventDetails {
+interface SelectedCalendarEvent {
+  calendarId: string;
   title: string;
   start: string;
   end: string;
+  event_type: string;
+  deal_id?: string;
+  lead_id?: string;
   client_name?: string;
   asset_name?: string;
   service_type?: string;
   service_types?: string[];
   status?: string;
+  payment_status?: string;
+  total_amount?: number;
+  paid_amount?: number;
+  debt_amount?: number;
+  contract_number?: string;
+  contract_company_name?: string;
+  contract_text?: string;
+}
+
+interface OrderSummary {
+  id: string;
+  number: string;
+  notes: string | null;
+  start_date: string;
+  end_date: string;
+  guests_count: number;
+  status: string;
+  payment_status: string;
+  total_amount: number;
+  paid_amount: number;
+  debt_amount: number;
+  contract_id?: string | null;
+  contract_number?: string | null;
+  contract_company_name?: string | null;
+  contract_text?: string | null;
+}
+
+interface LeadDetail {
+  id: string;
+  comment: string | null;
+  preferred_date: string | null;
+  service_type: string | null;
+  guests_count: number;
 }
 
 const SERVICE_FILTER_OPTIONS: { value: string; label: string }[] = [
@@ -97,6 +148,29 @@ const SERVICE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "rent", label: "Аренда" },
   { value: "combined", label: "Комбо" },
 ];
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  unpaid: "Не оплачен",
+  partial: "Частично",
+  paid: "Оплачен",
+  overpaid: "Переплата",
+};
+
+const DEAL_STATUS_LABELS: Record<string, string> = {
+  new: "Новый",
+  confirmed: "Подтверждён",
+  in_progress: "В работе",
+  completed: "Завершён",
+  cancelled: "Отменён",
+};
+
+const ALLOWED_DEAL_STATUS_TRANSITIONS: Record<string, string[]> = {
+  new: ["new", "confirmed", "cancelled"],
+  confirmed: ["confirmed", "in_progress", "cancelled"],
+  in_progress: ["in_progress", "completed", "cancelled"],
+  completed: ["completed"],
+  cancelled: ["cancelled"],
+};
 
 export default function Calendar() {
   const getToken = useAuthStore((s) => s.getToken);
@@ -111,27 +185,111 @@ export default function Calendar() {
   const [addDate, setAddDate] = useState<{ start: string; end: string } | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState("");
   const [guestsCount, setGuestsCount] = useState(1);
   const [notes, setNotes] = useState("");
-  const [serviceLines, setServiceLines] = useState<ServiceLineForm[]>([]);
+  const [newContractId, setNewContractId] = useState("");
+  const [newContractQuery, setNewContractQuery] = useState("");
+  const [newContractSuggestions, setNewContractSuggestions] = useState<ContractRow[]>([]);
+  const [newContractMenuOpen, setNewContractMenuOpen] = useState(false);
+  const [newContractText, setNewContractText] = useState("");
+  const newContractSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dealContractId, setDealContractId] = useState("");
+  const [dealContractQuery, setDealContractQuery] = useState("");
+  const [dealContractSuggestions, setDealContractSuggestions] = useState<ContractRow[]>([]);
+  const [dealContractMenuOpen, setDealContractMenuOpen] = useState(false);
+  const [dealContractText, setDealContractText] = useState("");
+  const dealContractSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [participantLines, setParticipantLines] = useState<ParticipantLineForm[]>([]);
   const [slotLines, setSlotLines] = useState<SlotLineForm[]>([]);
   const [serviceCatalog, setServiceCatalog] = useState<ServiceCatalogOption[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<EventDetails | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<SelectedCalendarEvent | null>(null);
+  const [orderDetail, setOrderDetail] = useState<OrderSummary | null>(null);
+  const [dealNotes, setDealNotes] = useState("");
+  const [dealStartDate, setDealStartDate] = useState("");
+  const [dealEndDate, setDealEndDate] = useState("");
+  const [dealGuestsCount, setDealGuestsCount] = useState("1");
+  const [dealStatus, setDealStatus] = useState("");
+  const [quickPayAmount, setQuickPayAmount] = useState("");
+  const [quickPayMethod, setQuickPayMethod] = useState("cash");
+  const [quickPaySaving, setQuickPaySaving] = useState(false);
+  const [leadDetail, setLeadDetail] = useState<LeadDetail | null>(null);
+  const [leadComment, setLeadComment] = useState("");
+  const [leadPreferredDate, setLeadPreferredDate] = useState("");
+  const [leadServiceType, setLeadServiceType] = useState("");
+  const [leadGuestsCount, setLeadGuestsCount] = useState(1);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const calendarRef = useRef<FullCalendar>(null);
 
   const initEventForm = useCallback((startIso: string, endIso: string) => {
-    setSelectedClientId("");
     setGuestsCount(1);
     setNotes("");
-    setServiceLines([
-      { service_type: "rafting", catalog_item_id: "", description: "Услуга", quantity: 1, unit_price: 0 },
+    setNewContractId("");
+    setNewContractQuery("");
+    setNewContractSuggestions([]);
+    setNewContractMenuOpen(false);
+    setNewContractText("");
+    setParticipantLines([
+      {
+        clientMode: "existing",
+        client_id: "",
+        new_first_name: "",
+        new_last_name: "",
+        new_phone: "",
+        new_email: "",
+        service_type: "rafting",
+        catalog_item_id: "",
+        description: "Услуга",
+        quantity: 1,
+        unit_price: 0,
+      },
     ]);
     setSlotLines([{ asset_id: "", start_datetime: startIso, end_datetime: endIso, quantity: 1 }]);
   }, []);
 
+  const fetchContractSuggestions = useCallback(
+    async (q: string, target: "new" | "deal") => {
+      const token = getToken();
+      if (!token) return;
+      const setRows = target === "new" ? setNewContractSuggestions : setDealContractSuggestions;
+      try {
+        const params = new URLSearchParams({ limit: "40" });
+        if (q.trim()) params.set("search", q.trim());
+        const res = await apiFetch<Paginated<ContractRow>>(`/contracts/?${params}`, { token });
+        setRows((res as Paginated<ContractRow>).items ?? []);
+      } catch {
+        setRows([]);
+      }
+    },
+    [getToken]
+  );
+
+  useEffect(() => {
+    if (!showAddModal) return;
+    if (newContractSearchTimerRef.current) clearTimeout(newContractSearchTimerRef.current);
+    newContractSearchTimerRef.current = setTimeout(() => {
+      void fetchContractSuggestions(newContractQuery, "new");
+    }, 320);
+    return () => {
+      if (newContractSearchTimerRef.current) clearTimeout(newContractSearchTimerRef.current);
+    };
+  }, [showAddModal, newContractQuery, fetchContractSuggestions]);
+
+  useEffect(() => {
+    if (!selectedEvent?.deal_id) return;
+    if (dealContractSearchTimerRef.current) clearTimeout(dealContractSearchTimerRef.current);
+    dealContractSearchTimerRef.current = setTimeout(() => {
+      void fetchContractSuggestions(dealContractQuery, "deal");
+    }, 320);
+    return () => {
+      if (dealContractSearchTimerRef.current) clearTimeout(dealContractSearchTimerRef.current);
+    };
+  }, [selectedEvent?.deal_id, dealContractQuery, fetchContractSuggestions]);
+
   const getCatalogOptionsByType = useCallback(
-    (serviceType: ServiceLineForm["service_type"]) => {
+    (serviceType: ParticipantLineForm["service_type"]) => {
       if (serviceType === "combined") {
         return serviceCatalog;
       }
@@ -164,14 +322,22 @@ export default function Calendar() {
       { token }
     );
     setEvents(
-      data.map((e) => ({
-        id: e.id as string,
-        title: e.title as string,
-        start: e.start as string,
-        end: e.end as string,
-        backgroundColor: (e.color as string) || undefined,
-        extendedProps: e,
-      }))
+      data.map((e) => {
+        const idStr = String(e.id);
+        const evType = String(e.event_type ?? "");
+        const startEditable = evType === "deal" || idStr.startsWith("booking:");
+        const durationEditable = idStr.startsWith("booking:");
+        return {
+          id: idStr,
+          title: e.title as string,
+          start: e.start as string,
+          end: e.end as string,
+          backgroundColor: (e.color as string) || undefined,
+          startEditable,
+          durationEditable,
+          extendedProps: e,
+        };
+      })
     );
   }, [assetFilter, getToken, managerFilter, serviceTypeFilter]);
 
@@ -180,6 +346,210 @@ export default function Calendar() {
       fetchEvents(dateRange.start, dateRange.end);
     }
   }, [dateRange, fetchEvents]);
+
+  useEffect(() => {
+    if (!selectedEvent?.deal_id) {
+      setOrderDetail(null);
+      setDealNotes("");
+      setDealStartDate("");
+      setDealEndDate("");
+      setDealGuestsCount("1");
+      setDealStatus("");
+      setQuickPayAmount("");
+      setDealContractId("");
+      setDealContractQuery("");
+      setDealContractText("");
+      setDealContractSuggestions([]);
+      setDealContractMenuOpen(false);
+      setOrderLoading(false);
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    let cancelled = false;
+    setOrderLoading(true);
+    setDetailError(null);
+    setDealContractId("");
+    setDealContractQuery("");
+    setDealContractText("");
+    (async () => {
+      try {
+        const o = await apiFetch<OrderSummary>(`/orders/${selectedEvent.deal_id}`, { token });
+        if (cancelled) return;
+        setOrderDetail(o);
+        setDealNotes(o.notes ?? "");
+        setDealStartDate(o.start_date?.slice(0, 10) ?? "");
+        setDealEndDate(o.end_date?.slice(0, 10) ?? "");
+        setDealGuestsCount(String(o.guests_count ?? 1));
+        setDealStatus(o.status ?? "");
+        setDealContractId(o.contract_id ?? "");
+        setDealContractText(o.contract_text ?? "");
+        if (o.contract_number && o.contract_company_name) {
+          setDealContractQuery(`№ ${o.contract_number} (${o.contract_company_name})`);
+        } else {
+          setDealContractQuery("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setOrderDetail(null);
+          setDetailError(err instanceof Error ? err.message : "Не удалось загрузить заказ");
+        }
+      } finally {
+        if (!cancelled) setOrderLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent?.deal_id, getToken]);
+
+  useEffect(() => {
+    if (!selectedEvent?.lead_id) {
+      setLeadDetail(null);
+      setLeadComment("");
+      setLeadPreferredDate("");
+      setLeadServiceType("");
+      setLeadGuestsCount(1);
+      setLeadLoading(false);
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    let cancelled = false;
+    setLeadLoading(true);
+    setDetailError(null);
+    (async () => {
+      try {
+        const L = await apiFetch<LeadDetail>(`/leads/${selectedEvent.lead_id}`, { token });
+        if (cancelled) return;
+        setLeadDetail(L);
+        setLeadComment(L.comment ?? "");
+        setLeadPreferredDate(L.preferred_date?.slice(0, 10) ?? "");
+        setLeadServiceType(L.service_type ?? "");
+        setLeadGuestsCount(L.guests_count ?? 1);
+      } catch (err) {
+        if (!cancelled) {
+          setLeadDetail(null);
+          setDetailError(err instanceof Error ? err.message : "Не удалось загрузить заявку");
+        }
+      } finally {
+        if (!cancelled) setLeadLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent?.lead_id, getToken]);
+
+  const closeEventModal = () => {
+    setSelectedEvent(null);
+    setDetailError(null);
+    setQuickPayAmount("");
+  };
+
+  const refreshOrderForModal = async () => {
+    if (!selectedEvent?.deal_id) return;
+    const token = getToken();
+    if (!token) return;
+    const o = await apiFetch<OrderSummary>(`/orders/${selectedEvent.deal_id}`, { token });
+    setOrderDetail(o);
+    setDealGuestsCount(String(o.guests_count ?? 1));
+    setDealStatus(o.status ?? "");
+    setDealContractId(o.contract_id ?? "");
+    setDealContractText(o.contract_text ?? "");
+    if (o.contract_number && o.contract_company_name) {
+      setDealContractQuery(`№ ${o.contract_number} (${o.contract_company_name})`);
+    } else {
+      setDealContractQuery("");
+    }
+  };
+
+  const submitQuickPayment = async () => {
+    if (!selectedEvent?.deal_id || !quickPayAmount.trim()) return;
+    const token = getToken();
+    if (!token) return;
+    const amt = Number(quickPayAmount.replace(",", "."));
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setDetailError("Укажите сумму платежа больше нуля.");
+      return;
+    }
+    setQuickPaySaving(true);
+    setDetailError(null);
+    try {
+      await apiFetch("/payments/", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          deal_id: selectedEvent.deal_id,
+          amount: amt,
+          method: quickPayMethod,
+          notes: "Из календаря",
+        }),
+      });
+      setQuickPayAmount("");
+      await refreshOrderForModal();
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Ошибка оплаты");
+    } finally {
+      setQuickPaySaving(false);
+    }
+  };
+
+  const saveDealEdits = async () => {
+    if (!selectedEvent?.deal_id) return;
+    const token = getToken();
+    if (!token) return;
+    setDetailSaving(true);
+    setDetailError(null);
+    try {
+      await apiFetch(`/orders/${selectedEvent.deal_id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          notes: dealNotes.trim() ? dealNotes.trim() : null,
+          start_date: dealStartDate || undefined,
+          end_date: dealEndDate || undefined,
+          guests_count: Math.max(1, parseInt(dealGuestsCount, 10) || 1),
+          status: dealStatus || undefined,
+          contract_id: dealContractId.trim() ? dealContractId.trim() : null,
+          contract_text: dealContractText.trim() ? dealContractText.trim() : null,
+        }),
+      });
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      closeEventModal();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
+  const saveLeadEdits = async () => {
+    if (!selectedEvent?.lead_id) return;
+    const token = getToken();
+    if (!token) return;
+    setDetailSaving(true);
+    setDetailError(null);
+    try {
+      await apiFetch(`/leads/${selectedEvent.lead_id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          comment: leadComment.trim() ? leadComment.trim() : null,
+          preferred_date: leadPreferredDate.trim() ? leadPreferredDate : null,
+          service_type: leadServiceType.trim() ? leadServiceType : null,
+          guests_count: leadGuestsCount,
+        }),
+      });
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      closeEventModal();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setDetailSaving(false);
+    }
+  };
 
   const handleDatesSet = (info: DatesSetArg) => {
     setDateRange({ start: info.start, end: info.end });
@@ -201,17 +571,32 @@ export default function Calendar() {
 
   const persistBookingRange = async (info: EventDropArg | EventResizeDoneArg) => {
     const id = info.event.id;
-    if (!id.startsWith("booking:")) return;
-    const bookingId = id.replace("booking:", "");
+    const start = info.event.start?.toISOString();
+    const end = info.event.end?.toISOString();
+    if (!start || !end) {
+      info.revert();
+      return;
+    }
+    if (!id.startsWith("deal:") && !id.startsWith("booking:")) {
+      info.revert();
+      return;
+    }
     try {
-      await apiFetch(`/calendar/events/booking/${bookingId}`, {
-        method: "PATCH",
-        token: getToken() ?? undefined,
-        body: JSON.stringify({
-          start: info.event.start?.toISOString(),
-          end: info.event.end?.toISOString(),
-        }),
-      });
+      if (id.startsWith("deal:")) {
+        const dealId = id.replace("deal:", "");
+        await apiFetch(`/calendar/events/deal/${dealId}`, {
+          method: "PATCH",
+          token: getToken() ?? undefined,
+          body: JSON.stringify({ start, end }),
+        });
+      } else {
+        const bookingId = id.replace("booking:", "");
+        await apiFetch(`/calendar/events/booking/${bookingId}`, {
+          method: "PATCH",
+          token: getToken() ?? undefined,
+          body: JSON.stringify({ start, end }),
+        });
+      }
       if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
     } catch (err) {
       const msg =
@@ -226,13 +611,40 @@ export default function Calendar() {
   };
 
   const handleEventResize = (info: EventResizeDoneArg) => {
+    if (!info.event.id.startsWith("booking:")) {
+      info.revert();
+      return;
+    }
     void persistBookingRange(info);
   };
 
+  const refreshClients = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const clientsRes = await apiFetch<Paginated<Client>>("/clients/", { token });
+      setClients((clientsRes as Paginated<Client>).items ?? []);
+    } catch {
+      /* ignore */
+    }
+  }, [getToken]);
+
   const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!addDate || !selectedClientId || serviceLines.length === 0 || slotLines.length === 0) return;
-    if (serviceLines.some((line) => !line.description.trim())) {
+    if (!addDate || participantLines.length === 0 || slotLines.length === 0) return;
+    for (const line of participantLines) {
+      if (line.clientMode === "existing" && !line.client_id) {
+        alert("Выберите клиента для каждого участника или укажите нового клиента.");
+        return;
+      }
+      if (line.clientMode === "new") {
+        if (!line.new_first_name.trim() || !line.new_last_name.trim() || !line.new_phone.trim()) {
+          alert("Для нового клиента укажите имя, фамилию и телефон.");
+          return;
+        }
+      }
+    }
+    if (participantLines.some((line) => !line.description.trim())) {
       alert("Заполните описание всех услуг.");
       return;
     }
@@ -245,15 +657,30 @@ export default function Calendar() {
         method: "POST",
         token: getToken() ?? undefined,
         body: JSON.stringify({
-          client_id: selectedClientId,
           guests_count: guestsCount,
           notes: notes || null,
-          services: serviceLines.map((line) => ({
-            service_type: line.service_type,
-            description: line.description,
-            quantity: line.quantity,
-            unit_price: line.unit_price,
-          })),
+          contract_id: newContractId.trim() ? newContractId.trim() : null,
+          contract_text: newContractText.trim() ? newContractText.trim() : null,
+          participants: participantLines.map((line) => {
+            const service = {
+              service_type: line.service_type,
+              description: line.description.trim(),
+              quantity: line.quantity,
+              unit_price: line.unit_price,
+            };
+            if (line.clientMode === "new") {
+              return {
+                new_client: {
+                  first_name: line.new_first_name.trim(),
+                  last_name: line.new_last_name.trim(),
+                  phone: line.new_phone.trim(),
+                  email: line.new_email.trim() || null,
+                },
+                service,
+              };
+            }
+            return { client_id: line.client_id, service };
+          }),
           slots: slotLines.map((line) => ({
             asset_id: line.asset_id,
             start_datetime: new Date(line.start_datetime).toISOString(),
@@ -264,6 +691,7 @@ export default function Calendar() {
       });
       setShowAddModal(false);
       setAddDate(null);
+      await refreshClients();
       if (dateRange) fetchEvents(dateRange.start, dateRange.end);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Ошибка создания");
@@ -325,9 +753,17 @@ export default function Calendar() {
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-slate-700 shrink-0">
-        <h1 className="text-xl font-bold">Календарь заказов</h1>
-        <div className="flex flex-wrap gap-2 items-center justify-end">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-4 border-b border-slate-700 shrink-0">
+        <div className="min-w-0 space-y-1">
+          <h1 className="text-xl font-bold">Календарь заказов</h1>
+          <p className="text-slate-400 text-xs sm:text-sm max-w-2xl leading-snug">
+            <strong className="font-medium text-slate-300">Новая заявка:</strong> форма «Добавить» создаёт{" "}
+            <strong className="font-medium text-slate-300">заявку</strong> в разделе заявок (с участниками, услугами и
+            планируемыми слотами в комментарии); бронирования активов появятся после конвертации заявки в заказ. По клику
+            на блок заказа — правки и оплата; заявки — отдельная карточка. Блоки заказов можно переносить на сетке.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-center justify-end shrink-0">
           {isManagerRole ? (
             <span className="text-sm text-slate-400 px-2">Только ваши бронирования</span>
           ) : (
@@ -418,15 +854,30 @@ export default function Calendar() {
           height="100%"
           eventClick={(info) => {
             const ext = info.event.extendedProps as Record<string, unknown>;
+            const dealRaw = ext.deal_id;
+            const leadRaw = ext.lead_id;
+            const extNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+            const extStr = (v: unknown) => (v != null && String(v).length ? String(v) : undefined);
             setSelectedEvent({
+              calendarId: info.event.id,
               title: info.event.title,
               start: info.event.start?.toISOString() ?? "",
               end: info.event.end?.toISOString() ?? "",
+              event_type: String(ext.event_type ?? ""),
+              deal_id: dealRaw != null ? String(dealRaw) : undefined,
+              lead_id: leadRaw != null ? String(leadRaw) : undefined,
               client_name: (ext.client_name as string) || undefined,
               asset_name: (ext.asset_name as string) || undefined,
               service_type: (ext.service_type as string) || undefined,
               service_types: (ext.service_types as string[] | undefined) ?? undefined,
               status: (ext.status as string) || undefined,
+              payment_status: extStr(ext.payment_status),
+              total_amount: extNum(ext.total_amount),
+              paid_amount: extNum(ext.paid_amount),
+              debt_amount: extNum(ext.debt_amount),
+              contract_number: extStr(ext.contract_number),
+              contract_company_name: extStr(ext.contract_company_name),
+              contract_text: extStr(ext.contract_text),
             });
           }}
         />
@@ -435,27 +886,13 @@ export default function Calendar() {
       {showAddModal && addDate && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-black text-slate-900 dark:text-slate-100 rounded-xl p-6 w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-xl max-h-[90vh] overflow-auto">
-            <h2 className="text-lg font-semibold mb-4">Новое мероприятие</h2>
+            <h2 className="text-lg font-semibold mb-4">Новая заявка (мероприятие)</h2>
             <form onSubmit={handleAddSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Клиент</label>
-                <select
-                  value={selectedClientId}
-                  onChange={(e) => setSelectedClientId(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                >
-                  <option value="">Выберите...</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.first_name} {c.last_name} — {c.phone}
-                    </option>
-                  ))}
-                </select>
-              </div>
-                <div>
-                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Гостей</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                    Гостей (всего)
+                  </label>
                   <input
                     type="number"
                     min={1}
@@ -474,15 +911,85 @@ export default function Calendar() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <div className="relative">
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                    Договор — поиск по номеру или компании
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={newContractQuery}
+                      onChange={(e) => {
+                        setNewContractQuery(e.target.value);
+                        setNewContractId("");
+                        setNewContractMenuOpen(true);
+                      }}
+                      onFocus={() => setNewContractMenuOpen(true)}
+                      placeholder="Начните вводить номер или название компании…"
+                      className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewContractId("");
+                        setNewContractQuery("");
+                        setNewContractMenuOpen(false);
+                      }}
+                      className="shrink-0 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      Сбросить
+                    </button>
+                  </div>
+                  {newContractMenuOpen && newContractSuggestions.length > 0 && (
+                    <ul className="absolute z-20 mt-1 w-full max-h-48 overflow-auto rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-lg">
+                      {newContractSuggestions.map((c) => (
+                        <li key={c.id} className="border-b border-slate-100 dark:border-slate-800 last:border-0">
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
+                            onClick={() => {
+                              setNewContractId(c.id);
+                              setNewContractQuery(`№ ${c.number} (${c.company_name})`);
+                              setNewContractMenuOpen(false);
+                            }}
+                          >
+                            № {c.number} — {c.company_name}
+                            {c.title ? ` · ${c.title}` : ""}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                    Текст по договору (произвольно, без привязки к справочнику)
+                  </label>
+                  <textarea
+                    value={newContractText}
+                    onChange={(e) => setNewContractText(e.target.value)}
+                    rows={2}
+                    placeholder="Реквизиты, примечание к договору…"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium">Услуги</h3>
+                  <h3 className="font-medium">Участники и услуги</h3>
                   <button
                     type="button"
                     onClick={() =>
-                      setServiceLines((prev) => [
+                      setParticipantLines((prev) => [
                         ...prev,
                         {
+                          clientMode: "existing",
+                          client_id: "",
+                          new_first_name: "",
+                          new_last_name: "",
+                          new_phone: "",
+                          new_email: "",
                           service_type: "rafting",
                           catalog_item_id: "",
                           description: "Услуга",
@@ -493,110 +1000,226 @@ export default function Calendar() {
                     }
                     className="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded"
                   >
-                    + Услуга
+                    + Участник
                   </button>
                 </div>
-                {serviceLines.map((line, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2">
-                    <select
-                      value={line.service_type}
-                      onChange={(e) =>
-                        setServiceLines((prev) => {
-                          const nextType = e.target.value as ServiceLineForm["service_type"];
-                          const first = getCatalogOptionsByType(nextType)[0];
-                          return prev.map((row, i) =>
-                            i === idx
-                              ? {
-                                  ...row,
-                                  service_type: nextType,
-                                  catalog_item_id: first?.id ?? "",
-                                  description: first?.description ?? row.description,
-                                  unit_price: first?.unit_price ?? row.unit_price,
-                                }
-                              : row
-                          );
-                        })
-                      }
-                      className="col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                    >
-                      <option value="rafting">Сплав</option>
-                      <option value="hostel">Хостел</option>
-                      <option value="rent">Аренда</option>
-                      <option value="combined">Комбо</option>
-                    </select>
-                    <select
-                      value={line.catalog_item_id}
-                      onChange={(e) =>
-                        setServiceLines((prev) => {
-                          const selectedId = e.target.value;
-                          return prev.map((row, i) => {
-                            if (i !== idx) return row;
-                            const selected = getCatalogOptionsByType(row.service_type).find(
-                              (item) => item.id === selectedId
+                {participantLines.map((line, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-3 bg-slate-50/50 dark:bg-slate-900/20"
+                  >
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Участник {idx + 1}
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                      <div className="sm:w-48">
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Клиент</label>
+                        <select
+                          value={line.clientMode}
+                          onChange={(e) => {
+                            const mode = e.target.value as ParticipantLineForm["clientMode"];
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) =>
+                                i === idx
+                                  ? {
+                                      ...row,
+                                      clientMode: mode,
+                                      client_id: mode === "existing" ? row.client_id : "",
+                                    }
+                                  : row
+                              )
                             );
-                            return {
-                              ...row,
-                              catalog_item_id: selectedId,
-                              description: selected?.description ?? row.description,
-                              unit_price: selected?.unit_price ?? row.unit_price,
-                            };
-                          });
-                        })
-                      }
-                      className="col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                    >
-                      <option value="">Выберите услугу...</option>
-                      {getCatalogOptionsByType(line.service_type).map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {line.service_type === "combined"
-                            ? `${option.service_type === "rafting" ? "Сплав" : option.service_type === "hostel" ? "Хостел" : "Аренда"}: ${option.label}`
-                            : option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      value={line.description}
-                      onChange={(e) =>
-                        setServiceLines((prev) =>
-                          prev.map((row, i) => (i === idx ? { ...row, description: e.target.value } : row))
-                        )
-                      }
-                      className="col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                    />
-                    <input
-                      type="number"
-                      min={1}
-                      value={line.quantity}
-                      onChange={(e) =>
-                        setServiceLines((prev) =>
-                          prev.map((row, i) => (i === idx ? { ...row, quantity: Number(e.target.value || 1) } : row))
-                        )
-                      }
-                      className="col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={line.unit_price}
-                      onChange={(e) =>
-                        setServiceLines((prev) =>
-                          prev.map((row, i) => (i === idx ? { ...row, unit_price: Number(e.target.value || 0) } : row))
-                        )
-                      }
-                      className="col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setServiceLines((prev) =>
-                          prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
-                        )
-                      }
-                      className="col-span-12 md:col-span-1 px-2 py-2 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300"
-                    >
-                      Удалить
-                    </button>
+                          }}
+                          className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
+                        >
+                          <option value="existing">Из базы</option>
+                          <option value="new">Новый клиент</option>
+                        </select>
+                      </div>
+                      {line.clientMode === "existing" && (
+                        <div className="flex-1 min-w-0">
+                          <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                            Карточка
+                          </label>
+                          <select
+                            value={line.client_id}
+                            onChange={(e) =>
+                              setParticipantLines((prev) =>
+                                prev.map((row, i) =>
+                                  i === idx ? { ...row, client_id: e.target.value } : row
+                                )
+                              )
+                            }
+                            className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
+                          >
+                            <option value="">Выберите...</option>
+                            {clients.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.first_name} {c.last_name} — {c.phone}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    {line.clientMode === "new" && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                        <input
+                          placeholder="Имя"
+                          value={line.new_first_name}
+                          onChange={(e) =>
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) =>
+                                i === idx ? { ...row, new_first_name: e.target.value } : row
+                              )
+                            )
+                          }
+                          className="px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
+                        />
+                        <input
+                          placeholder="Фамилия"
+                          value={line.new_last_name}
+                          onChange={(e) =>
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) =>
+                                i === idx ? { ...row, new_last_name: e.target.value } : row
+                              )
+                            )
+                          }
+                          className="px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
+                        />
+                        <input
+                          placeholder="Телефон"
+                          value={line.new_phone}
+                          onChange={(e) =>
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) =>
+                                i === idx ? { ...row, new_phone: e.target.value } : row
+                              )
+                            )
+                          }
+                          className="px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
+                        />
+                        <input
+                          placeholder="Email (необязательно)"
+                          type="email"
+                          value={line.new_email}
+                          onChange={(e) =>
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) =>
+                                i === idx ? { ...row, new_email: e.target.value } : row
+                              )
+                            )
+                          }
+                          className="px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
+                        />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-12 gap-2">
+                      <select
+                        value={line.service_type}
+                        onChange={(e) =>
+                          setParticipantLines((prev) => {
+                            const nextType = e.target.value as ParticipantLineForm["service_type"];
+                            const first = getCatalogOptionsByType(nextType)[0];
+                            return prev.map((row, i) =>
+                              i === idx
+                                ? {
+                                    ...row,
+                                    service_type: nextType,
+                                    catalog_item_id: first?.id ?? "",
+                                    description: first?.description ?? row.description,
+                                    unit_price: first?.unit_price ?? row.unit_price,
+                                  }
+                                : row
+                            );
+                          })
+                        }
+                        className="col-span-12 sm:col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      >
+                        <option value="rafting">Сплав</option>
+                        <option value="hostel">Хостел</option>
+                        <option value="rent">Аренда</option>
+                        <option value="combined">Комбо</option>
+                      </select>
+                      <select
+                        value={line.catalog_item_id}
+                        onChange={(e) =>
+                          setParticipantLines((prev) => {
+                            const selectedId = e.target.value;
+                            return prev.map((row, i) => {
+                              if (i !== idx) return row;
+                              const selected = getCatalogOptionsByType(row.service_type).find(
+                                (item) => item.id === selectedId
+                              );
+                              return {
+                                ...row,
+                                catalog_item_id: selectedId,
+                                description: selected?.description ?? row.description,
+                                unit_price: selected?.unit_price ?? row.unit_price,
+                              };
+                            });
+                          })
+                        }
+                        className="col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      >
+                        <option value="">Выберите услугу...</option>
+                        {getCatalogOptionsByType(line.service_type).map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {line.service_type === "combined"
+                              ? `${option.service_type === "rafting" ? "Сплав" : option.service_type === "hostel" ? "Хостел" : "Аренда"}: ${option.label}`
+                              : option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={line.description}
+                        onChange={(e) =>
+                          setParticipantLines((prev) =>
+                            prev.map((row, i) => (i === idx ? { ...row, description: e.target.value } : row))
+                          )
+                        }
+                        className="col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        value={line.quantity}
+                        onChange={(e) =>
+                          setParticipantLines((prev) =>
+                            prev.map((row, i) =>
+                              i === idx ? { ...row, quantity: Number(e.target.value || 1) } : row
+                            )
+                          )
+                        }
+                        className="col-span-6 sm:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={line.unit_price}
+                        onChange={(e) =>
+                          setParticipantLines((prev) =>
+                            prev.map((row, i) =>
+                              i === idx ? { ...row, unit_price: Number(e.target.value || 0) } : row
+                            )
+                          )
+                        }
+                        className="col-span-6 sm:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setParticipantLines((prev) =>
+                            prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
+                          )
+                        }
+                        className="col-span-12 sm:col-span-1 px-2 py-2 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300"
+                      >
+                        Удалить
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -705,26 +1328,378 @@ export default function Calendar() {
       )}
 
       {selectedEvent && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg border border-slate-200 shadow-xl">
-            <h2 className="text-lg font-semibold mb-4">{selectedEvent.title}</h2>
-            <div className="space-y-2 text-sm">
-              {selectedEvent.client_name && <p><span className="text-slate-600">Клиент:</span> {selectedEvent.client_name}</p>}
-              {selectedEvent.asset_name && <p><span className="text-slate-600">Активы:</span> {selectedEvent.asset_name}</p>}
-              {selectedEvent.service_types && selectedEvent.service_types.length > 0 ? (
-                <p><span className="text-slate-600">Услуги:</span> {selectedEvent.service_types.join(", ")}</p>
-              ) : (
-                selectedEvent.service_type && <p><span className="text-slate-600">Услуга:</span> {selectedEvent.service_type}</p>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-700 shadow-xl max-h-[90vh] overflow-y-auto text-slate-900 dark:text-slate-100">
+            <h2 className="text-lg font-semibold mb-1">{selectedEvent.title}</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Редактирование мероприятия: даты, гости, статус заказа, комментарий. Оплата — блок ниже (или в карточке
+              заказа). Заявки — отдельно. Цвета полос: «Настройки» → цвета календаря.
+            </p>
+            <div className="space-y-2 text-sm mb-4">
+              {selectedEvent.client_name && (
+                <p>
+                  <span className="text-slate-600 dark:text-slate-400">Клиент:</span> {selectedEvent.client_name}
+                </p>
               )}
-              {selectedEvent.status && <p><span className="text-slate-600">Статус:</span> {selectedEvent.status}</p>}
-              <p><span className="text-slate-600">Начало:</span> {new Date(selectedEvent.start).toLocaleString("ru-RU")}</p>
-              <p><span className="text-slate-600">Конец:</span> {new Date(selectedEvent.end).toLocaleString("ru-RU")}</p>
+              {selectedEvent.asset_name && (
+                <p>
+                  <span className="text-slate-600 dark:text-slate-400">Объект / место:</span>{" "}
+                  {selectedEvent.asset_name}
+                </p>
+              )}
+              {selectedEvent.service_types && selectedEvent.service_types.length > 0 ? (
+                <p>
+                  <span className="text-slate-600 dark:text-slate-400">Услуги:</span>{" "}
+                  {selectedEvent.service_types.join(", ")}
+                </p>
+              ) : (
+                selectedEvent.service_type && (
+                  <p>
+                    <span className="text-slate-600 dark:text-slate-400">Услуга:</span>{" "}
+                    {selectedEvent.service_type}
+                  </p>
+                )
+              )}
+              {selectedEvent.status && (
+                <p>
+                  <span className="text-slate-600 dark:text-slate-400">Статус:</span> {selectedEvent.status}
+                </p>
+              )}
+              {(selectedEvent.contract_number || selectedEvent.contract_company_name) && (
+                <p>
+                  <span className="text-slate-600 dark:text-slate-400">Договор:</span>{" "}
+                  {selectedEvent.contract_number ? `№ ${selectedEvent.contract_number}` : "—"}
+                  {selectedEvent.contract_company_name ? ` (${selectedEvent.contract_company_name})` : ""}
+                </p>
+              )}
+              {selectedEvent.contract_text && (
+                <p className="whitespace-pre-wrap">
+                  <span className="text-slate-600 dark:text-slate-400">Текст по договору:</span>{" "}
+                  {selectedEvent.contract_text}
+                </p>
+              )}
+              <p>
+                <span className="text-slate-600 dark:text-slate-400">В календаре:</span>{" "}
+                {new Date(selectedEvent.start).toLocaleString("ru-RU")} —{" "}
+                {new Date(selectedEvent.end).toLocaleString("ru-RU")}
+              </p>
+              {selectedEvent.deal_id && selectedEvent.payment_status != null && (
+                <p>
+                  <span className="text-slate-600 dark:text-slate-400">Оплата (сводка):</span>{" "}
+                  {PAYMENT_STATUS_LABELS[selectedEvent.payment_status] ?? selectedEvent.payment_status}
+                  {selectedEvent.total_amount != null && selectedEvent.paid_amount != null && (
+                    <span className="text-slate-500 dark:text-slate-400">
+                      {" "}
+                      — {Number(selectedEvent.paid_amount).toLocaleString("ru")} /{" "}
+                      {Number(selectedEvent.total_amount).toLocaleString("ru")} ₽
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
-            <div className="pt-4">
+
+            {detailError && (
+              <p className="text-sm text-red-500 dark:text-red-400 mb-3">{detailError}</p>
+            )}
+            {selectedEvent.lead_id && leadLoading && (
+              <p className="text-sm text-slate-500 mb-3">Загрузка заявки…</p>
+            )}
+
+            {selectedEvent.deal_id && !selectedEvent.lead_id && (
+              <div className="space-y-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Оплата мероприятия</h3>
+                {orderLoading && <p className="text-xs text-slate-500">Загрузка данных заказа…</p>}
+                {orderDetail && (
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-600 p-3 space-y-2 text-sm">
+                    <p>
+                      <span className="text-slate-500 dark:text-slate-400">Статус оплаты:</span>{" "}
+                      <span className="font-medium text-slate-800 dark:text-slate-100">
+                        {PAYMENT_STATUS_LABELS[orderDetail.payment_status] ?? orderDetail.payment_status}
+                      </span>
+                    </p>
+                    <p className="text-slate-600 dark:text-slate-300">
+                      Сумма: {Number(orderDetail.total_amount).toLocaleString("ru")} ₽ · Оплачено:{" "}
+                      {Number(orderDetail.paid_amount).toLocaleString("ru")} ₽ · Остаток:{" "}
+                      {Number(orderDetail.debt_amount).toLocaleString("ru")} ₽
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder={`Остаток ${Number(orderDetail.debt_amount).toLocaleString("ru")} ₽`}
+                        value={quickPayAmount}
+                        onChange={(e) => setQuickPayAmount(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                      />
+                      <select
+                        value={quickPayMethod}
+                        onChange={(e) => setQuickPayMethod(e.target.value)}
+                        className="px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                      >
+                        <option value="cash">Наличные</option>
+                        <option value="card">Карта</option>
+                        <option value="transfer">Перевод</option>
+                        <option value="online">Онлайн</option>
+                      </select>
+                      <button
+                        type="button"
+                        disabled={quickPaySaving || !quickPayAmount.trim()}
+                        onClick={() => void submitQuickPayment()}
+                        className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {quickPaySaving ? "…" : "Записать оплату"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Платёж вносится в заказ; статус оплаты пересчитывается по сумме платежей.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedEvent.deal_id &&
+              selectedEvent.event_type === "deal" &&
+              !selectedEvent.lead_id && (
+              <div className="space-y-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Заказ (мероприятие)</h3>
+                {orderLoading && <p className="text-xs text-slate-500">Загрузка заказа…</p>}
+                {orderDetail && (
+                  <p className="text-xs text-slate-500">
+                    № {orderDetail.number}
+                    <Link
+                      href={`/dashboard/orders/${orderDetail.id}`}
+                      className="ml-2 text-brandBlue-600 dark:text-brandBlue-400 hover:underline"
+                    >
+                      Полная карточка
+                    </Link>
+                  </p>
+                )}
+                <div className="relative space-y-1">
+                  <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                    Договор — поиск по номеру или компании
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      value={dealContractQuery}
+                      onChange={(e) => {
+                        setDealContractQuery(e.target.value);
+                        setDealContractId("");
+                        setDealContractMenuOpen(true);
+                      }}
+                      onFocus={() => setDealContractMenuOpen(true)}
+                      placeholder="Найти в справочнике или сбросьте и оставьте только текст ниже"
+                      disabled={orderLoading || !orderDetail}
+                      className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      disabled={orderLoading || !orderDetail}
+                      onClick={() => {
+                        setDealContractId("");
+                        setDealContractQuery("");
+                        setDealContractMenuOpen(false);
+                      }}
+                      className="shrink-0 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Сбросить
+                    </button>
+                  </div>
+                  {dealContractMenuOpen && dealContractSuggestions.length > 0 && (
+                    <ul className="absolute z-20 mt-1 w-full max-h-40 overflow-auto rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-lg">
+                      {dealContractSuggestions.map((c) => (
+                        <li key={c.id} className="border-b border-slate-100 dark:border-slate-800 last:border-0">
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
+                            onClick={() => {
+                              setDealContractId(c.id);
+                              setDealContractQuery(`№ ${c.number} (${c.company_name})`);
+                              setDealContractMenuOpen(false);
+                            }}
+                          >
+                            № {c.number} — {c.company_name}
+                            {c.title ? ` · ${c.title}` : ""}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                    Текст по договору (произвольно)
+                  </label>
+                  <textarea
+                    value={dealContractText}
+                    onChange={(e) => setDealContractText(e.target.value)}
+                    rows={2}
+                    disabled={orderLoading || !orderDetail}
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Комментарий к заказу</label>
+                  <textarea
+                    value={dealNotes}
+                    onChange={(e) => setDealNotes(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Гостей (заказ)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={dealGuestsCount}
+                      onChange={(e) => setDealGuestsCount(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Статус заказа</label>
+                    <select
+                      value={dealStatus || orderDetail?.status || "new"}
+                      onChange={(e) => setDealStatus(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                    >
+                      {Array.from(
+                        new Set(
+                          ALLOWED_DEAL_STATUS_TRANSITIONS[dealStatus || orderDetail?.status || "new"] ?? [
+                            dealStatus || orderDetail?.status || "new",
+                          ]
+                        )
+                      ).map((s) => (
+                        <option key={s} value={s}>
+                          {DEAL_STATUS_LABELS[s] ?? s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Дата начала</label>
+                    <input
+                      type="date"
+                      value={dealStartDate}
+                      onChange={(e) => setDealStartDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Дата окончания</label>
+                    <input
+                      type="date"
+                      value={dealEndDate}
+                      onChange={(e) => setDealEndDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={detailSaving || orderLoading || !orderDetail}
+                  onClick={() => void saveDealEdits()}
+                  className="w-full py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium disabled:opacity-50"
+                >
+                  {detailSaving ? "Сохранение…" : "Сохранить изменения заказа"}
+                </button>
+              </div>
+            )}
+
+            {selectedEvent.lead_id && (
+              <div className="space-y-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Заявка</h3>
+                {leadDetail && (
+                  <p className="text-xs text-slate-500">
+                    <Link
+                      href="/dashboard/leads"
+                      className="text-brandBlue-600 dark:text-brandBlue-400 hover:underline"
+                    >
+                      Список заявок
+                    </Link>
+                  </p>
+                )}
+                <div>
+                  <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Комментарий</label>
+                  <textarea
+                    value={leadComment}
+                    onChange={(e) => setLeadComment(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Желаемая дата</label>
+                    <input
+                      type="date"
+                      value={leadPreferredDate}
+                      onChange={(e) => setLeadPreferredDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Гостей</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={leadGuestsCount}
+                      onChange={(e) => setLeadGuestsCount(Number(e.target.value) || 1)}
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Тип услуги</label>
+                  <select
+                    value={leadServiceType}
+                    onChange={(e) => setLeadServiceType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                  >
+                    <option value="">Не указано</option>
+                    <option value="rafting">Сплав</option>
+                    <option value="hostel">Хостел</option>
+                    <option value="rent">Аренда</option>
+                    <option value="combined">Комбо</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  disabled={detailSaving || leadLoading || !leadDetail}
+                  onClick={() => void saveLeadEdits()}
+                  className="w-full py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium disabled:opacity-50"
+                >
+                  {detailSaving ? "Сохранение…" : "Сохранить заявку"}
+                </button>
+              </div>
+            )}
+
+            {selectedEvent.deal_id &&
+              selectedEvent.event_type !== "deal" &&
+              !selectedEvent.lead_id && (
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-2 text-sm">
+                <p className="text-slate-600 dark:text-slate-400 mb-2">
+                  Слоты и позиции заказа правьте в карточке; оплату можно внести в блоке выше.
+                </p>
+                <Link
+                  href={`/dashboard/orders/${selectedEvent.deal_id}`}
+                  className="inline-block px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
+                >
+                  Открыть заказ
+                </Link>
+              </div>
+            )}
+
+            <div className="pt-4 flex gap-2">
               <button
                 type="button"
-                onClick={() => setSelectedEvent(null)}
-                className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg"
+                onClick={closeEventModal}
+                className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg text-white"
               >
                 Закрыть
               </button>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
@@ -38,7 +39,14 @@ export default function DealsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Заказы</h1>
+      <h1 className="text-2xl font-bold">Заказы (краткий список)</h1>
+      <p className="text-slate-400 text-sm mt-1 mb-4 max-w-3xl">
+        Упрощённый просмотр; для фильтров, создания и карточки заказа откройте раздел{" "}
+        <Link href="/dashboard/orders" className="text-brandBlue-300 hover:underline">
+          «Заказы»
+        </Link>{" "}
+        в меню.
+      </p>
       {deals && deals.length > 0 ? (
         <div className="rounded-xl border border-slate-700 overflow-hidden">
           <table className="w-full">

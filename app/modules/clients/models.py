@@ -30,6 +30,7 @@ class Company(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     clients: Mapped[list["Client"]] = relationship("Client", back_populates="company")
+    contracts: Mapped[list["Contract"]] = relationship("Contract", back_populates="company")
 
     def __repr__(self) -> str:
         return f"<Company {self.name}>"
@@ -47,6 +48,7 @@ class Client(Base):
         GUID(), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
     )
     source: Mapped[str] = mapped_column(String(50), default="manual")  # site | phone | referral
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=list)
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True

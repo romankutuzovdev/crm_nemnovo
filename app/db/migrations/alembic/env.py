@@ -20,6 +20,9 @@ import app.modules.integrations.models  # noqa
 import app.modules.rafting.models  # noqa
 import app.modules.hostel.models  # noqa
 import app.modules.rent.models  # noqa
+import app.modules.ui_settings.models  # noqa
+import app.modules.contracts.models  # noqa
+import app.modules.excursions.models  # noqa
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

@@ -70,6 +70,9 @@ export default function ReportsAnalyticsPage() {
     return (
       <FadeUp className="space-y-3">
         <h1 className="text-2xl font-bold">Аналитика</h1>
+        <p className="text-slate-500 text-sm max-w-2xl">
+          Динамика бронирований и подтверждённой выручки по месяцам — только для роли директора.
+        </p>
         <p className="text-slate-500">
           Доступно только директору.
         </p>
@@ -91,11 +94,18 @@ export default function ReportsAnalyticsPage() {
 
   return (
     <Stagger className="space-y-4">
-      <FadeUp className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Аналитика (директор)</h1>
-        <Link className="text-slate-600 hover:text-slate-900 hover:underline" href="/dashboard/reports">
-          Обычные отчёты
-        </Link>
+      <FadeUp className="space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Аналитика (директор)</h1>
+            <p className="text-slate-600 text-sm mt-1 max-w-3xl leading-snug">
+              Графики: число бронирований и подтверждённая выручка по месяцам в выбранном диапазоне. Детальные таблицы — в разделе «Обычные отчёты».
+            </p>
+          </div>
+          <Link className="text-slate-600 hover:text-slate-900 hover:underline shrink-0" href="/dashboard/reports">
+            Обычные отчёты
+          </Link>
+        </div>
       </FadeUp>
 
       <FadeUp className="rounded-xl border border-slate-200 bg-white p-4 flex flex-wrap gap-4 items-end">

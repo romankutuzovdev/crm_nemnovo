@@ -3,11 +3,19 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ForbiddenError
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.bookings.schemas import BookingCreate, BookingResponse, BookingUpdate
 from app.modules.bookings.service import BookingService
-from app.modules.orders.schemas import OrderAuditEntryResponse, OrderCreate, OrderResponse, OrderUpdate
+from app.modules.orders.schemas import (
+    OrderAuditEntryResponse,
+    OrderCreate,
+    OrderItemCreate,
+    OrderItemUpdate,
+    OrderResponse,
+    OrderUpdate,
+)
 from app.modules.orders.service import OrderService
 from app.shared.base_schema import PaginatedResponse
 from app.shared.enums import DealStatus
@@ -18,12 +26,24 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 @router.get("/", response_model=PaginatedResponse[OrderResponse])
 async def list_orders(
     client_id: UUID | None = Query(None),
+    pending_approval: bool = Query(
+        False,
+        description="Очередь: новые заказы без ответственного (менеджер / директор / админ)",
+    ),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     current_user=require_permission("orders", "read"),
     db: AsyncSession = Depends(get_db),
 ):
     service = OrderService(db)
+    if pending_approval:
+        if current_user.role.name not in ("admin", "director", "manager"):
+            raise ForbiddenError(
+                detail="Очередь на подтверждение доступна только менеджеру или руководству",
+            )
+        items = await service.repo.list_pending_approval(offset=offset, limit=limit)
+        total = await service.repo.count_pending_approval()
+        return PaginatedResponse(items=items, total=total, offset=offset, limit=limit)
     if client_id:
         items = await service.repo.list_by_client(client_id, offset=offset, limit=limit)
         total = await service.repo.count(filters={"client_id": client_id})
@@ -87,6 +107,41 @@ async def update_order(
 ):
     service = OrderService(db)
     return await service.update_order(order_id, data, updated_by=current_user.id)
+
+
+@router.post("/{order_id}/items", response_model=OrderResponse, status_code=201)
+async def add_order_item(
+    order_id: UUID,
+    data: OrderItemCreate,
+    current_user=require_permission("orders", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Добавить услугу (основную или дополнительную) с привязкой к клиенту и ценой."""
+    service = OrderService(db)
+    return await service.add_order_item(order_id, data, updated_by=current_user.id)
+
+
+@router.patch("/{order_id}/items/{item_id}", response_model=OrderResponse)
+async def update_order_item(
+    order_id: UUID,
+    item_id: UUID,
+    data: OrderItemUpdate,
+    current_user=require_permission("orders", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = OrderService(db)
+    return await service.update_order_item(order_id, item_id, data, updated_by=current_user.id)
+
+
+@router.delete("/{order_id}/items/{item_id}", response_model=OrderResponse)
+async def delete_order_item(
+    order_id: UUID,
+    item_id: UUID,
+    current_user=require_permission("orders", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = OrderService(db)
+    return await service.delete_order_item(order_id, item_id, updated_by=current_user.id)
 
 
 @router.post("/{order_id}/cancel", response_model=OrderResponse)

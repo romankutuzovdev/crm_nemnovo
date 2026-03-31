@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -19,9 +19,12 @@ type Tab = "details" | "items" | "bookings" | "payments" | "history";
 interface OrderItem {
   id: string;
   description: string;
+  item_kind?: string;
   quantity: number;
   unit_price: number;
   total_price: number;
+  client_id?: string | null;
+  client_name?: string | null;
 }
 
 interface Booking {
@@ -164,6 +167,17 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
   combined: "Комбинированный",
 };
 
+const BOOKING_STATUS_LABELS: Record<string, string> = {
+  pending: "Ожидает подтверждения",
+  confirmed: "Подтверждено",
+  cancelled: "Отменено",
+};
+
+const ITEM_KIND_LABELS: Record<string, string> = {
+  primary: "Основная",
+  addon: "Доп. услуга",
+};
+
 export default function OrderDetailsPage() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
@@ -196,6 +210,17 @@ export default function OrderDetailsPage() {
   const [invoiceAmount, setInvoiceAmount] = useState("0");
   const [invoiceDueDate, setInvoiceDueDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [invoiceIssuerCompanyId, setInvoiceIssuerCompanyId] = useState("");
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemClientId, setNewItemClientId] = useState("");
+  const [newItemKind, setNewItemKind] = useState<"primary" | "addon">("addon");
+  const [newItemDesc, setNewItemDesc] = useState("");
+  const [newItemQty, setNewItemQty] = useState("1");
+  const [newItemPrice, setNewItemPrice] = useState("0");
+  const [editItem, setEditItem] = useState<OrderItem | null>(null);
+  const [editItemDesc, setEditItemDesc] = useState("");
+  const [editItemKind, setEditItemKind] = useState<"primary" | "addon">("primary");
+  const [editItemQty, setEditItemQty] = useState("1");
+  const [editItemPrice, setEditItemPrice] = useState("0");
 
   const { data: order, isLoading, error, refetch } = useQuery({
     queryKey: ["order", orderId],
@@ -275,6 +300,34 @@ export default function OrderDetailsPage() {
   });
 
   const assetOptions = showAllAssets ? assets ?? [] : availableAssets ?? [];
+
+  const clientChoices = useMemo(() => {
+    const m = new Map<string, string>();
+    if (order?.client_id && orderClient) {
+      m.set(order.client_id, `${orderClient.first_name} ${orderClient.last_name}`.trim());
+    }
+    order?.items?.forEach((it) => {
+      if (it.client_id && it.client_name) {
+        m.set(it.client_id, it.client_name.trim());
+      }
+    });
+    return Array.from(m.entries()).map(([id, name]) => ({ id, name }));
+  }, [order?.client_id, order?.items, orderClient]);
+
+  const sortedOrderItems = useMemo(() => {
+    const list = [...(order?.items ?? [])];
+    list.sort((a, b) => {
+      const ca = a.client_id ?? "";
+      const cb = b.client_id ?? "";
+      if (ca !== cb) return ca.localeCompare(cb);
+      const ka = a.item_kind === "addon" ? 1 : 0;
+      const kb = b.item_kind === "addon" ? 1 : 0;
+      if (ka !== kb) return ka - kb;
+      return a.id.localeCompare(b.id);
+    });
+    return list;
+  }, [order?.items]);
+
   const assetLabel = useMemo(() => {
     const m = new Map<string, string>();
     (assets ?? []).forEach((a) => m.set(a.id, `${a.code} — ${a.name}`));
@@ -393,6 +446,60 @@ export default function OrderDetailsPage() {
     },
   });
 
+  const addOrderItem = useMutation({
+    mutationFn: () =>
+      apiFetch<Order>(`/orders/${orderId}/items`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          client_id: newItemClientId.trim() ? newItemClientId.trim() : null,
+          description: newItemDesc.trim(),
+          item_kind: newItemKind,
+          quantity: Math.max(1, parseInt(newItemQty, 10) || 1),
+          unit_price: Number(newItemPrice) || 0,
+        }),
+      }),
+    onSuccess: async () => {
+      setShowAddItem(false);
+      setNewItemDesc("");
+      setNewItemQty("1");
+      setNewItemPrice("0");
+      setNewItemKind("addon");
+      await refetch();
+    },
+  });
+
+  const updateOrderItem = useMutation({
+    mutationFn: () => {
+      if (!editItem) throw new Error("no item");
+      return apiFetch<Order>(`/orders/${orderId}/items/${editItem.id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          description: editItemDesc.trim(),
+          item_kind: editItemKind,
+          quantity: Math.max(1, parseInt(editItemQty, 10) || 1),
+          unit_price: Number(editItemPrice) || 0,
+        }),
+      });
+    },
+    onSuccess: async () => {
+      setEditItem(null);
+      await refetch();
+    },
+  });
+
+  const deleteOrderItem = useMutation({
+    mutationFn: (itemId: string) =>
+      apiFetch<Order>(`/orders/${orderId}/items/${itemId}`, {
+        method: "DELETE",
+        token,
+      }),
+    onSuccess: async () => {
+      await refetch();
+    },
+  });
+
   const assigneeNameById = useMemo(() => {
     const m = new Map<string, string>();
     (assignableUsers ?? []).forEach((u) => m.set(u.id, u.full_name));
@@ -458,6 +565,9 @@ export default function OrderDetailsPage() {
     return ALLOWED_STATUS_TRANSITIONS[order.status] ?? [];
   }, [order]);
 
+  const needsManagerApproval =
+    !!order && order.status === "new" && (order.assigned_to === null || order.assigned_to === "");
+
   if (isLoading) return <div className="text-slate-500">Загрузка...</div>;
   if (error) {
     return (
@@ -470,6 +580,25 @@ export default function OrderDetailsPage() {
 
   return (
     <div className="space-y-4">
+      {needsManagerApproval && (
+        <div className="rounded-xl border border-amber-600/50 bg-amber-950/30 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium text-amber-100">Заказ ожидает подтверждения менеджера</p>
+            <p className="text-sm text-amber-200/80 mt-1">
+              После подтверждения вы станете ответственным, бронирования со статусом «ожидает» перейдут в «подтверждено».
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => transitionStatus.mutate("confirmed")}
+            disabled={transitionStatus.isPending}
+            className="shrink-0 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-medium"
+          >
+            {transitionStatus.isPending ? "…" : "Подтвердить и взять в работу"}
+          </button>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -511,7 +640,11 @@ export default function OrderDetailsPage() {
                 : order.client_id}
             </Link>
           </div>
-          <div className="text-slate-500 text-sm">
+          <p className="text-slate-500 text-xs mt-2 max-w-3xl leading-snug">
+            <strong className="font-medium text-slate-400">Вкладки:</strong> сведения по заказу, позиции (в т.ч. привязка к
+            клиентам), брони активов, оплаты и журнал изменений.
+          </p>
+          <div className="text-slate-500 text-sm mt-1">
             Ответственный:{" "}
             <span className="text-slate-300">
               {order.assigned_to
@@ -719,32 +852,284 @@ export default function OrderDetailsPage() {
       )}
 
       {tab === "items" && (
-        <div className="rounded-xl border border-slate-700 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-slate-800/50">
-              <tr>
-                <th className="text-left p-4">Описание</th>
-                <th className="text-left p-4">Кол-во</th>
-                <th className="text-left p-4">Цена</th>
-                <th className="text-left p-4">Итого</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.items?.map((it) => (
-                <tr key={it.id} className="border-t border-slate-700">
-                  <td className="p-4">{it.description}</td>
-                  <td className="p-4">{it.quantity}</td>
-                  <td className="p-4">{Number(it.unit_price).toLocaleString("ru")} ₽</td>
-                  <td className="p-4">{Number(it.total_price).toLocaleString("ru")} ₽</td>
+        <div className="space-y-4">
+          <p className="text-slate-400 text-sm max-w-3xl leading-snug">
+            У каждого участника (клиента) — своя <strong className="font-medium text-slate-300">основная услуга</strong> с ценой;
+            к ней можно добавить <strong className="font-medium text-slate-300">дополнительные услуги</strong> с тем же клиентом.
+            Сумма заказа пересчитывается автоматически.
+          </p>
+          <div className="flex flex-wrap gap-2 justify-between items-center">
+            <button
+              type="button"
+              onClick={() => {
+                setNewItemClientId(order?.client_id ?? "");
+                setNewItemKind("addon");
+                setNewItemDesc("");
+                setNewItemQty("1");
+                setNewItemPrice("0");
+                setShowAddItem(true);
+              }}
+              className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium"
+            >
+              + Услуга для клиента
+            </button>
+          </div>
+          <div className="rounded-xl border border-slate-700 overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-slate-800/50">
+                <tr>
+                  <th className="text-left p-4">Клиент</th>
+                  <th className="text-left p-4">Тип</th>
+                  <th className="text-left p-4">Описание</th>
+                  <th className="text-left p-4">Кол-во</th>
+                  <th className="text-left p-4">Цена</th>
+                  <th className="text-left p-4">Итого</th>
+                  <th className="text-left p-4">Действия</th>
                 </tr>
-              ))}
-              {(!order.items || order.items.length === 0) && (
-                <tr className="border-t border-slate-700">
-                  <td className="p-4 text-slate-500" colSpan={4}>Позиции отсутствуют</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sortedOrderItems.map((it, idx) => {
+                  const prev = idx > 0 ? sortedOrderItems[idx - 1] : null;
+                  const showClientHeader =
+                    !prev || (prev.client_id || "") !== (it.client_id || "");
+                  const kind = it.item_kind === "addon" ? "addon" : "primary";
+                  return (
+                    <Fragment key={it.id}>
+                      {showClientHeader && (
+                        <tr className="bg-slate-800/70 border-t border-slate-600">
+                          <td colSpan={7} className="p-2 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                            Клиент:{" "}
+                            {(it.client_id &&
+                              clientChoices.find((c) => c.id === it.client_id)?.name) ||
+                              it.client_name?.trim() ||
+                              (it.client_id ? `ID ${it.client_id.slice(0, 8)}…` : "Заказ / не указан")}
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="border-t border-slate-700">
+                        <td className="p-4 text-slate-300">
+                          {it.client_name?.trim() || (it.client_id ? "—" : "—")}
+                        </td>
+                        <td className="p-4">
+                          <span
+                            className={
+                              kind === "addon"
+                                ? "text-amber-400 text-sm"
+                                : "text-emerald-400 text-sm"
+                            }
+                          >
+                            {ITEM_KIND_LABELS[kind] ?? kind}
+                          </span>
+                        </td>
+                        <td className="p-4">{it.description}</td>
+                        <td className="p-4">{it.quantity}</td>
+                        <td className="p-4">{Number(it.unit_price).toLocaleString("ru")} ₽</td>
+                        <td className="p-4">{Number(it.total_price).toLocaleString("ru")} ₽</td>
+                        <td className="p-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditItem(it);
+                              setEditItemDesc(it.description);
+                              setEditItemKind(kind);
+                              setEditItemQty(String(it.quantity));
+                              setEditItemPrice(String(it.unit_price));
+                            }}
+                            className="text-sm text-brandBlue-300 hover:underline"
+                          >
+                            Изменить
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm("Удалить позицию из заказа?")) {
+                                deleteOrderItem.mutate(it.id);
+                              }
+                            }}
+                            disabled={deleteOrderItem.isPending}
+                            className="text-sm text-red-400 hover:underline disabled:opacity-50"
+                          >
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
+                {sortedOrderItems.length === 0 && (
+                  <tr className="border-t border-slate-700">
+                    <td className="p-4 text-slate-500" colSpan={7}>
+                      Позиции отсутствуют — добавьте услугу для клиента.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {showAddItem && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+              <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
+                <h3 className="text-lg font-semibold text-slate-100 mb-4">Новая услуга</h3>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Клиент</label>
+                    <select
+                      value={newItemClientId}
+                      onChange={(e) => setNewItemClientId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                    >
+                      <option value="">Не привязан (общий заказ)</option>
+                      {clientChoices.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Тип</label>
+                    <select
+                      value={newItemKind}
+                      onChange={(e) => setNewItemKind(e.target.value as "primary" | "addon")}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                    >
+                      <option value="primary">Основная услуга</option>
+                      <option value="addon">Дополнительная услуга</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Описание</label>
+                    <input
+                      value={newItemDesc}
+                      onChange={(e) => setNewItemDesc(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      placeholder="Например: инвентарь, трансфер…"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Кол-во</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={newItemQty}
+                        onChange={(e) => setNewItemQty(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Цена за ед., ₽</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={newItemPrice}
+                        onChange={(e) => setNewItemPrice(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {addOrderItem.isError && (
+                  <p className="text-red-400 text-sm mt-2">
+                    {addOrderItem.error instanceof Error ? addOrderItem.error.message : "Ошибка"}
+                  </p>
+                )}
+                <div className="flex gap-2 mt-6">
+                  <button
+                    type="button"
+                    disabled={addOrderItem.isPending || !newItemDesc.trim()}
+                    onClick={() => addOrderItem.mutate()}
+                    className="flex-1 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white disabled:opacity-50"
+                  >
+                    {addOrderItem.isPending ? "Сохранение…" : "Добавить"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddItem(false)}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {editItem && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+              <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
+                <h3 className="text-lg font-semibold text-slate-100 mb-4">Правка услуги</h3>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Тип</label>
+                    <select
+                      value={editItemKind}
+                      onChange={(e) => setEditItemKind(e.target.value as "primary" | "addon")}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                    >
+                      <option value="primary">Основная услуга</option>
+                      <option value="addon">Дополнительная услуга</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Описание</label>
+                    <input
+                      value={editItemDesc}
+                      onChange={(e) => setEditItemDesc(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Кол-во</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editItemQty}
+                        onChange={(e) => setEditItemQty(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Цена за ед., ₽</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={editItemPrice}
+                        onChange={(e) => setEditItemPrice(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+                {updateOrderItem.isError && (
+                  <p className="text-red-400 text-sm mt-2">
+                    {updateOrderItem.error instanceof Error ? updateOrderItem.error.message : "Ошибка"}
+                  </p>
+                )}
+                <div className="flex gap-2 mt-6">
+                  <button
+                    type="button"
+                    disabled={updateOrderItem.isPending || !editItemDesc.trim()}
+                    onClick={() => updateOrderItem.mutate()}
+                    className="flex-1 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white disabled:opacity-50"
+                  >
+                    {updateOrderItem.isPending ? "Сохранение…" : "Сохранить"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditItem(null)}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -807,7 +1192,7 @@ export default function OrderDetailsPage() {
                         new Date(b.end_datetime).toLocaleString("ru")
                       )}
                     </td>
-                    <td className="p-4">{b.status}</td>
+                    <td className="p-4">{BOOKING_STATUS_LABELS[b.status] ?? b.status}</td>
                     <td className="p-4">
                       <div className="flex flex-wrap gap-2">
                         {editingBookingId === b.id ? (

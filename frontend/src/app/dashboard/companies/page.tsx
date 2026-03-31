@@ -112,6 +112,9 @@ export default function CompaniesPage() {
         </div>
       </div>
 
+      <p className="text-slate-400 text-sm mb-2 max-w-3xl leading-snug">
+        Юрлица и сегмент B2B/B2C; клиенты могут быть привязаны к компании при работе с договорами и счетами.
+      </p>
       <p className="text-slate-500 text-sm mb-3">
         Найдено: {total}
         {debouncedSearch ? ` по запросу «${debouncedSearch}»` : ""}

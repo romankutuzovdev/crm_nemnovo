@@ -405,12 +405,17 @@ async def seed_demo(session: AsyncSession) -> None:
             return hb
         ci = date.today() + timedelta(days=5)
         co = ci + timedelta(days=2)
+        nights = (co - ci).days
+        guests_n = 2
+        pppn = Decimal("1750.00") if nights > 0 else Decimal("0")
         hb = HostelBooking(
             room_id=room.id,
             deal_id=deal.id if deal else None,
             check_in=ci,
             check_out=co,
-            total_amount=Decimal("7000.00"),
+            guests_count=guests_n,
+            price_per_person_per_night=pppn,
+            total_amount=Decimal("7000.00") if nights > 0 else Decimal("0"),
             status=BookingStatus.CONFIRMED,
             notes=f"demo-hostel-{suf}",
         )
@@ -468,19 +473,19 @@ async def seed_demo(session: AsyncSession) -> None:
     i1 = await ensure_instructor("Демо Инструктор Первый")
     i2 = await ensure_instructor("Демо Инструктор Второй")
 
-    async def ensure_vehicle(name: str, plate: str) -> TransportVehicle:
+    async def ensure_vehicle(brand: str, model: str | None, plate: str) -> TransportVehicle:
         q = await session.execute(select(TransportVehicle).where(TransportVehicle.plate_number == plate))
         v = q.scalar_one_or_none()
         if v:
             return v
-        v = TransportVehicle(name=name, plate_number=plate, seats=8)
+        v = TransportVehicle(brand=brand, model=model, plate_number=plate, seats=8)
         session.add(v)
         await session.flush()
         print(f"  + транспорт {plate}")
         return v
 
-    v1 = await ensure_vehicle("Демо Ford Transit", "DEMO-01")
-    v2 = await ensure_vehicle("Демо УАЗ", "DEMO-02")
+    v1 = await ensure_vehicle("Ford", "Transit", "DEMO-01")
+    v2 = await ensure_vehicle("УАЗ", "Патриот", "DEMO-02")
 
     async def ensure_trip(route: RaftingRoute, deal: Deal | None, suf: str, d: date) -> None:
         q = await session.execute(

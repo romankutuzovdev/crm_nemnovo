@@ -30,7 +30,8 @@ class Asset(Base):
     category_id: Mapped[int] = mapped_column(Integer, ForeignKey("asset_categories.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
-    capacity: Mapped[int] = mapped_column(Integer, default=1)
+    capacity: Mapped[int] = mapped_column(Integer, default=1)  # мест на одну единицу (напр. байдарку)
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # число единиц в наличии
     status: Mapped[str] = mapped_column(String(30), default=AssetStatus.ACTIVE, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -41,6 +42,9 @@ class Asset(Base):
     bookings: Mapped[list["Booking"]] = relationship("Booking", back_populates="asset")
     maintenances: Mapped[list["AssetMaintenance"]] = relationship(
         "AssetMaintenance", back_populates="asset", cascade="all, delete-orphan"
+    )
+    quantity_changes: Mapped[list["AssetQuantityChange"]] = relationship(
+        "AssetQuantityChange", back_populates="asset", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
@@ -61,6 +65,25 @@ class AssetMaintenance(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     asset: Mapped[Asset] = relationship("Asset", back_populates="maintenances")
+
+
+class AssetQuantityChange(Base):
+    __tablename__ = "asset_quantity_changes"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    asset_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    previous_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    asset: Mapped["Asset"] = relationship("Asset", back_populates="quantity_changes")
 
 
 class Product(Base):

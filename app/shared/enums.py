@@ -19,6 +19,7 @@ class LeadSource(StrEnum):
     TELEPHONY = "telephony"
     MANUAL = "manual"
     REFERRAL = "referral"
+    CALENDAR = "calendar"
 
 
 class ServiceType(StrEnum):
@@ -26,6 +27,13 @@ class ServiceType(StrEnum):
     HOSTEL = "hostel"
     RENT = "rent"
     COMBINED = "combined"
+
+
+class DealItemKind(StrEnum):
+    """Позиция заказа: основная услуга клиента или дополнение к ней."""
+
+    PRIMARY = "primary"
+    ADDON = "addon"
 
 
 class CompanySegment(StrEnum):
@@ -65,6 +73,13 @@ class PaymentTxStatus(StrEnum):
 
 
 class BookingStatus(StrEnum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+
+
+class ExcursionStatus(StrEnum):
+    DRAFT = "draft"
     PENDING = "pending"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"

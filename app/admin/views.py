@@ -82,7 +82,15 @@ class DealAdmin(ModelView, model=Deal):
 class DealItemAdmin(ModelView, model=DealItem):
     name = "Позиция сделки"
     name_plural = "Позиции сделок"
-    column_list = [DealItem.deal, DealItem.description, DealItem.quantity, DealItem.unit_price, DealItem.total_price]
+    column_list = [
+        DealItem.deal,
+        DealItem.client_id,
+        DealItem.item_kind,
+        DealItem.description,
+        DealItem.quantity,
+        DealItem.unit_price,
+        DealItem.total_price,
+    ]
 
 
 class AssetCategoryAdmin(ModelView, model=AssetCategory):

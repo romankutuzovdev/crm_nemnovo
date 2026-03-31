@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, ValidationError
 from app.core.permissions import require_permission
 from app.db.session import get_db
-from app.modules.hostel.repository import HostelBookingRepository, HostelRoomRepository
+from app.modules.hostel.repository import HostelBookingRepository, HostelRoomRepository, compute_hostel_booking_total
 from app.modules.hostel.schemas import (
     HostelBookingCreate,
     HostelBookingResponse,
@@ -99,12 +99,20 @@ async def create_booking(
     await room_repo.get_or_raise(data.room_id)
     booking_repo = HostelBookingRepository(db)
     guests_payload = [g.model_dump() for g in data.guests]
+    total_amount = compute_hostel_booking_total(
+        data.check_in,
+        data.check_out,
+        data.guests_count,
+        data.price_per_person_per_night,
+    )
     return await booking_repo.create_with_guests(
         room_id=data.room_id,
         deal_id=data.deal_id,
         check_in=data.check_in,
         check_out=data.check_out,
-        total_amount=data.total_amount,
+        guests_count=data.guests_count,
+        price_per_person_per_night=data.price_per_person_per_night,
+        total_amount=total_amount,
         status=data.status,
         notes=data.notes,
         guests=guests_payload,

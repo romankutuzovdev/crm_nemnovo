@@ -170,8 +170,9 @@ export default function RentPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Беседки и аренда</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Справочник позиций и заказы на дату с несколькими строками; при необходимости — привязка к заказу (UUID).
+        <p className="text-slate-400 text-sm mt-1 max-w-3xl leading-snug">
+          <strong className="font-medium text-slate-300">Справочник</strong> — что можно сдавать (цены по умолчанию). <strong className="font-medium text-slate-300">Заказы</strong> — дата
+          услуги, несколько строк (наименование, количество, цена), при необходимости привязка к заказу CRM (UUID).
         </p>
       </div>
 

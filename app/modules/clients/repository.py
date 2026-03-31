@@ -41,6 +41,7 @@ class ClientRepository(BaseRepository[Client]):
                 Client.last_name.ilike(f"%{query}%"),
                 Client.phone.ilike(f"%{query}%"),
                 Client.email.ilike(f"%{query}%"),
+                Client.comment.ilike(f"%{query}%"),
             )
         )
         if assigned_to:
@@ -58,6 +59,7 @@ class ClientRepository(BaseRepository[Client]):
                 Client.last_name.ilike(f"%{query}%"),
                 Client.phone.ilike(f"%{query}%"),
                 Client.email.ilike(f"%{query}%"),
+                Client.comment.ilike(f"%{query}%"),
             )
         )
         if assigned_to:

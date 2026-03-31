@@ -7,12 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import write_audit_log
 from app.core.exceptions import AssetConflictError, ConflictError, NotFoundError, ValidationError
-from app.modules.assets.models import Asset, AssetMaintenance, Product, StockMovement
+from app.modules.assets.models import Asset, AssetMaintenance, AssetQuantityChange, Product, StockMovement
 from app.modules.assets.repository import AssetRepository, AssetCategoryRepository, ProductRepository, StockMovementRepository
 from app.modules.assets.schemas import (
     AssetAuditEntryResponse,
     AssetCreate,
     AssetMaintenanceCreate,
+    AssetQuantityChangeResponse,
+    AssetQuantitySetRequest,
     AssetUpdate,
     StockAdjustRequest,
 )
@@ -27,6 +29,7 @@ def _asset_audit_snapshot(asset: Asset) -> dict:
         "name": asset.name,
         "code": asset.code,
         "capacity": asset.capacity,
+        "quantity": asset.quantity,
         "status": asset.status,
         "description": asset.description,
         "category_id": asset.category_id,
@@ -66,6 +69,16 @@ class AssetService:
             raise NotFoundError(f"AssetCategory {data.category_id} not found")
         asset = await self.repo.create(**data.model_dump())
         logger.info("asset.created", asset_id=str(asset.id), code=asset.code)
+        self.session.add(
+            AssetQuantityChange(
+                asset_id=asset.id,
+                previous_quantity=0,
+                new_quantity=int(asset.quantity),
+                delta=int(asset.quantity),
+                reason="Создание актива",
+                created_by=created_by,
+            )
+        )
         await write_audit_log(
             self.session,
             created_by,
@@ -80,13 +93,49 @@ class AssetService:
     async def get_asset(self, asset_id: UUID) -> Asset:
         return await self.repo.get_with_category_or_raise(asset_id)
 
+    async def _apply_quantity_change(
+        self,
+        asset_id: UUID,
+        new_quantity: int,
+        reason: str | None,
+        user_id: UUID,
+    ) -> None:
+        asset = await self.repo.get_or_raise(asset_id)
+        old = int(asset.quantity)
+        if new_quantity < 0:
+            raise ValidationError("Количество не может быть отрицательным")
+        if old == new_quantity:
+            return
+        self.session.add(
+            AssetQuantityChange(
+                asset_id=asset_id,
+                previous_quantity=old,
+                new_quantity=new_quantity,
+                delta=new_quantity - old,
+                reason=reason,
+                created_by=user_id,
+            )
+        )
+        await self.repo.update(asset_id, quantity=new_quantity)
+
     async def update_asset(self, asset_id: UUID, data: AssetUpdate, updated_by: UUID) -> Asset:
         asset = await self.repo.get_with_category_or_raise(asset_id)
         before = _asset_audit_snapshot(asset)
         update_data = data.model_dump(exclude_none=True)
+        q_raw = update_data.pop("quantity", None)
+        if q_raw is not None:
+            await self._apply_quantity_change(
+                asset_id,
+                int(q_raw),
+                "Карточка актива",
+                updated_by,
+            )
         if "status" in update_data:
             self._validate_status_transition(asset.status, str(update_data["status"]))
-        asset = await self.repo.update(asset_id, **update_data)
+        if update_data:
+            asset = await self.repo.update(asset_id, **update_data)
+        else:
+            asset = await self.repo.get_with_category_or_raise(asset_id)
         after = _asset_audit_snapshot(asset)
         if before != after:
             await write_audit_log(
@@ -119,6 +168,42 @@ class AssetService:
         )
         await self.session.flush()
         return await self.repo.get_with_category_or_raise(asset_id)
+
+    async def set_asset_quantity(
+        self, asset_id: UUID, data: AssetQuantitySetRequest, updated_by: UUID
+    ) -> Asset:
+        await self.repo.get_or_raise(asset_id)
+        await self._apply_quantity_change(asset_id, int(data.quantity), data.reason, updated_by)
+        await self.session.flush()
+        return await self.repo.get_with_category_or_raise(asset_id)
+
+    async def list_asset_quantity_changes(
+        self, asset_id: UUID, limit: int = 100
+    ) -> list[AssetQuantityChangeResponse]:
+        await self.repo.get_or_raise(asset_id)
+        result = await self.session.execute(
+            select(AssetQuantityChange, User.full_name)
+            .outerjoin(User, AssetQuantityChange.created_by == User.id)
+            .where(AssetQuantityChange.asset_id == asset_id)
+            .order_by(AssetQuantityChange.created_at.desc())
+            .limit(limit)
+        )
+        rows: list[AssetQuantityChangeResponse] = []
+        for ch, full_name in result.all():
+            rows.append(
+                AssetQuantityChangeResponse(
+                    id=ch.id,
+                    asset_id=ch.asset_id,
+                    previous_quantity=ch.previous_quantity,
+                    new_quantity=ch.new_quantity,
+                    delta=ch.delta,
+                    reason=ch.reason,
+                    created_by=ch.created_by,
+                    user_name=full_name or "—",
+                    created_at=ch.created_at,
+                )
+            )
+        return rows
 
     async def list_asset_audit(self, asset_id: UUID, limit: int = 50) -> list[AssetAuditEntryResponse]:
         await self.repo.get_or_raise(asset_id)

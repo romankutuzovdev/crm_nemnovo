@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
-type Tab = "details" | "orders" | "payments" | "calls" | "notes" | "history";
+type Tab = "card" | "orders" | "payments" | "calls" | "notes" | "history";
 
 interface Company {
   id: string;
@@ -29,6 +29,7 @@ interface Client {
   phone: string;
   email: string | null;
   source: string;
+  comment: string | null;
   tags: string[] | null;
   company: Company | null;
   created_at: string;
@@ -119,7 +120,7 @@ export default function ClientDetailsPage() {
   const token = getToken() ?? undefined;
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>("details");
+  const [tab, setTab] = useState<Tab>("card");
   const [noteText, setNoteText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [edit, setEdit] = useState({
@@ -127,6 +128,7 @@ export default function ClientDetailsPage() {
     last_name: "",
     phone: "",
     email: "",
+    comment: "",
     tags: "",
   });
 
@@ -186,10 +188,11 @@ export default function ClientDetailsPage() {
         method: "PATCH",
         token,
         body: JSON.stringify({
-          first_name: edit.first_name || undefined,
-          last_name: edit.last_name || undefined,
-          phone: edit.phone || undefined,
-          email: edit.email ? edit.email : null,
+          first_name: edit.first_name.trim() || undefined,
+          last_name: edit.last_name.trim() || undefined,
+          phone: edit.phone.trim() || undefined,
+          email: edit.email.trim() ? edit.email.trim() : null,
+          comment: edit.comment.trim() === "" ? null : edit.comment.trim(),
           tags: edit.tags
             ? edit.tags
                 .split(",")
@@ -236,31 +239,34 @@ export default function ClientDetailsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">
             {client.first_name} {client.last_name}
           </h1>
-          <div className="text-slate-400 text-sm mt-1">
-            {client.phone} {client.email ? `• ${client.email}` : ""}
-          </div>
-          {client.company && (
-            <div className="text-slate-400 text-sm">
-              Компания:{" "}
-              <Link
-                className="text-brandBlue-300 hover:underline"
-                href={`/dashboard/companies/${client.company.id}`}
-              >
-                {client.company.name}
-              </Link>
-              <span className="text-slate-500">
-                {" "}
-                ({client.company.segment === "b2c" ? "B2C" : "B2B"})
-              </span>
-            </div>
-          )}
+          <p className="text-slate-500 text-sm mt-1">
+            Карточка клиента: основные контакты и комментарий редактируются на вкладке «Карточка». Хронология заметок — в «Заметки».
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
+              <div className="text-slate-400">Заказов</div>
+              <div className="font-semibold">{totalStats.count}</div>
+            </div>
+            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
+              <div className="text-slate-400">Сумма</div>
+              <div className="font-semibold">{totalStats.total.toLocaleString("ru")} ₽</div>
+            </div>
+            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
+              <div className="text-slate-400">Оплачено</div>
+              <div className="font-semibold">{totalStats.paid.toLocaleString("ru")} ₽</div>
+            </div>
+            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
+              <div className="text-slate-400">Остаток</div>
+              <div className="font-semibold">{totalStats.debt.toLocaleString("ru")} ₽</div>
+            </div>
+          </div>
           <button
             onClick={() => {
               if (!isEditing) {
@@ -269,41 +275,24 @@ export default function ClientDetailsPage() {
                   last_name: client.last_name,
                   phone: client.phone,
                   email: client.email ?? "",
+                  comment: client.comment ?? "",
                   tags: (client.tags ?? []).join(", "),
                 });
               }
               setIsEditing((v) => !v);
-              setTab("details");
+              setTab("card");
             }}
-            className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+            className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 whitespace-nowrap"
           >
-            {isEditing ? "Закрыть" : "Редактировать"}
+            {isEditing ? "Закрыть редактирование" : "Редактировать карточку"}
           </button>
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-            <div className="text-slate-400">Заказов</div>
-            <div className="font-semibold">{totalStats.count}</div>
-          </div>
-          <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-            <div className="text-slate-400">Сумма</div>
-            <div className="font-semibold">{totalStats.total.toLocaleString("ru")} ₽</div>
-          </div>
-          <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-            <div className="text-slate-400">Оплачено</div>
-            <div className="font-semibold">{totalStats.paid.toLocaleString("ru")} ₽</div>
-          </div>
-          <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-            <div className="text-slate-400">Остаток</div>
-            <div className="font-semibold">{totalStats.debt.toLocaleString("ru")} ₽</div>
-          </div>
         </div>
       </div>
 
       <div className="flex gap-2 border-b border-slate-700">
         {(
           [
-            ["details", "Данные"],
+            ["card", "Карточка"],
             ["orders", "Заказы"],
             ["payments", "Оплаты"],
             ["calls", "Звонки"],
@@ -325,82 +314,143 @@ export default function ClientDetailsPage() {
         ))}
       </div>
 
-      {tab === "details" && (
-        <div className="rounded-xl border border-slate-700 bg-slate-800/20 p-4 grid gap-3 md:grid-cols-2">
-          {isEditing ? (
-            <>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Имя</label>
-                <input
-                  value={edit.first_name}
-                  onChange={(e) => setEdit((s) => ({ ...s, first_name: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Фамилия</label>
-                <input
-                  value={edit.last_name}
-                  onChange={(e) => setEdit((s) => ({ ...s, last_name: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Телефон</label>
-                <input
-                  value={edit.phone}
-                  onChange={(e) => setEdit((s) => ({ ...s, phone: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Email</label>
-                <input
-                  value={edit.email}
-                  onChange={(e) => setEdit((s) => ({ ...s, email: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm text-slate-400 mb-1">Теги (через запятую)</label>
-                <input
-                  value={edit.tags}
-                  onChange={(e) => setEdit((s) => ({ ...s, tags: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                  placeholder="vip, повторный, b2b"
-                />
-              </div>
-              <div className="md:col-span-2 flex gap-2">
-                <button
-                  onClick={() => updateClient.mutate()}
-                  disabled={updateClient.isPending}
-                  className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
-                >
-                  {updateClient.isPending ? "Сохранение..." : "Сохранить"}
-                </button>
-                <button
-                  onClick={() => setIsEditing(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
-                >
-                  Отмена
-                </button>
-              </div>
-              <div className="md:col-span-2 text-xs text-slate-500">
+      {tab === "card" && (
+        <div className="rounded-xl border border-brandBlue-800/40 bg-slate-800/25 shadow-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-700 bg-slate-900/40">
+            <h2 className="text-sm font-semibold text-slate-200">Карточка клиента</h2>
+            <p className="text-xs text-slate-500 mt-0.5">ФИО, телефон, email и комментарий — одним сохранением.</p>
+          </div>
+          <div className="p-4 md:p-6 grid gap-4 md:grid-cols-2">
+            {isEditing ? (
+              <>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Имя</label>
+                  <input
+                    value={edit.first_name}
+                    onChange={(e) => setEdit((s) => ({ ...s, first_name: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Фамилия</label>
+                  <input
+                    value={edit.last_name}
+                    onChange={(e) => setEdit((s) => ({ ...s, last_name: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Телефон</label>
+                  <input
+                    value={edit.phone}
+                    onChange={(e) => setEdit((s) => ({ ...s, phone: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={edit.email}
+                    onChange={(e) => setEdit((s) => ({ ...s, email: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-slate-400 mb-1">Комментарий к карточке</label>
+                  <textarea
+                    value={edit.comment}
+                    onChange={(e) => setEdit((s) => ({ ...s, comment: e.target.value }))}
+                    rows={4}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-slate-100 placeholder:text-slate-600"
+                    placeholder="Пожелания, особенности, договорённости…"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-slate-400 mb-1">Теги (через запятую)</label>
+                  <input
+                    value={edit.tags}
+                    onChange={(e) => setEdit((s) => ({ ...s, tags: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    placeholder="vip, повторный, b2b"
+                  />
+                </div>
+                <div className="md:col-span-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateClient.mutate()}
+                    disabled={updateClient.isPending || !edit.first_name.trim() || !edit.last_name.trim() || !edit.phone.trim()}
+                    className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
+                  >
+                    {updateClient.isPending ? "Сохранение..." : "Сохранить карточку"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+                  >
+                    Отмена
+                  </button>
+                </div>
                 {updateClient.isError && (
-                  <div className="text-red-400">
-                    Ошибка: {updateClient.error instanceof Error ? updateClient.error.message : "Неизвестная ошибка"}
+                  <div className="md:col-span-2 text-sm text-red-400">
+                    {updateClient.error instanceof Error ? updateClient.error.message : "Ошибка сохранения"}
                   </div>
                 )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div><span className="text-slate-400">Источник:</span> {client.source}</div>
-              <div><span className="text-slate-400">Теги:</span> {client.tags?.join(", ") || "—"}</div>
-            </>
-          )}
-          <div className="md:col-span-2 text-xs text-slate-500">
-            Создан: {new Date(client.created_at).toLocaleString("ru")} • Обновлён: {new Date(client.updated_at).toLocaleString("ru")}
+              </>
+            ) : (
+              <>
+                <div className="md:col-span-2 grid sm:grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                    <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">ФИО</div>
+                    <div className="text-lg text-slate-100 font-medium">
+                      {client.first_name} {client.last_name}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                    <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Телефон</div>
+                    <div className="text-lg text-slate-100 font-mono">{client.phone}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3 sm:col-span-2">
+                    <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Email</div>
+                    <div className="text-slate-200">{client.email || "—"}</div>
+                  </div>
+                </div>
+                <div className="md:col-span-2 rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                  <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Комментарий</div>
+                  <p className="text-slate-300 whitespace-pre-wrap min-h-[3rem]">
+                    {client.comment?.trim() ? client.comment : "Комментарий не заполнен — нажмите «Редактировать карточку»."}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                  <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Источник</div>
+                  <div className="text-slate-200">{client.source}</div>
+                </div>
+                <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                  <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Теги</div>
+                  <div className="text-slate-200">{client.tags?.length ? client.tags.join(", ") : "—"}</div>
+                </div>
+                {client.company && (
+                  <div className="md:col-span-2 rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                    <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Компания</div>
+                    <Link
+                      className="text-brandBlue-300 hover:underline font-medium"
+                      href={`/dashboard/companies/${client.company.id}`}
+                    >
+                      {client.company.name}
+                    </Link>
+                    <span className="text-slate-500 text-sm">
+                      {" "}
+                      ({client.company.segment === "b2c" ? "B2C" : "B2B"})
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="md:col-span-2 text-xs text-slate-500 pt-2 border-t border-slate-700/60">
+              Создан: {new Date(client.created_at).toLocaleString("ru")} • Обновлён:{" "}
+              {new Date(client.updated_at).toLocaleString("ru")}
+            </div>
           </div>
         </div>
       )}

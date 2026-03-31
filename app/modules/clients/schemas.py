@@ -55,6 +55,7 @@ class ClientCreate(BaseSchema):
     phone: str
     company_id: UUID | None = None
     source: str = "manual"
+    comment: str | None = None
     tags: list[str] = []
     assigned_to: UUID | None = None
 
@@ -70,6 +71,7 @@ class ClientUpdate(BaseSchema):
     email: EmailStr | None = None
     phone: str | None = None
     company_id: UUID | None = None
+    comment: str | None = None
     tags: list[str] | None = None
     assigned_to: UUID | None = None
 
@@ -85,6 +87,7 @@ class ClientResponse(UUIDSchema):
     email: str | None
     phone: str
     source: str
+    comment: str | None = None
     tags: list[str] | None
     company: CompanyResponse | None
     created_at: datetime

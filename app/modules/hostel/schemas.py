@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, computed_field, model_validator
 
 from app.shared.base_schema import BaseSchema, UUIDSchema
 from app.shared.enums import BookingStatus
@@ -56,7 +56,8 @@ class HostelBookingCreate(BaseSchema):
     deal_id: UUID | None = None
     check_in: date
     check_out: date
-    total_amount: float = Field(..., ge=0)
+    guests_count: int = Field(ge=1, le=100)
+    price_per_person_per_night: float = Field(ge=0)
     status: str = BookingStatus.PENDING
     notes: str | None = None
     guests: list[HostelGuestInput] = Field(default_factory=list)
@@ -65,8 +66,12 @@ class HostelBookingCreate(BaseSchema):
     def validate_dates_and_guests(self):
         if self.check_out <= self.check_in:
             raise ValueError("Дата выезда должна быть позже заезда")
+        if (self.check_out - self.check_in).days < 1:
+            raise ValueError("Нужна минимум одна ночь")
         if not self.guests:
             raise ValueError("Добавьте хотя бы одного гостя")
+        if self.guests_count < len(self.guests):
+            raise ValueError("Число проживающих не меньше количества записей гостей")
         return self
 
 
@@ -75,6 +80,8 @@ class HostelBookingUpdate(BaseSchema):
     deal_id: UUID | None = None
     check_in: date | None = None
     check_out: date | None = None
+    guests_count: int | None = Field(default=None, ge=1, le=100)
+    price_per_person_per_night: float | None = Field(default=None, ge=0)
     total_amount: float | None = Field(default=None, ge=0)
     status: str | None = None
     notes: str | None = None
@@ -93,8 +100,15 @@ class HostelBookingResponse(UUIDSchema):
     deal_id: UUID | None
     check_in: date
     check_out: date
+    guests_count: int
+    price_per_person_per_night: float | None
     total_amount: float
     status: str
     notes: str | None
     created_at: datetime
     guests: list[HostelGuestResponse] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def nights(self) -> int:
+        return (self.check_out - self.check_in).days

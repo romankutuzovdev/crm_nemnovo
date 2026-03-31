@@ -456,6 +456,8 @@ async def seed_demo() -> None:
                         deal_id=deal_id,
                         check_in=check_in,
                         check_out=check_out,
+                        guests_count=2,
+                        price_per_person_per_night=25.0,
                         total_amount=150.0,
                         status=BookingStatus.CONFIRMED.value,
                         notes="demo hostel booking",
@@ -516,11 +518,18 @@ async def seed_demo() -> None:
                 instr = await instr_repo.create(**RaftingInstructorCreate(full_name="Инструктор Демо", phone="+375291234567").model_dump())
 
             veh_row = await session.execute(
-                select(TransportVehicle).where(TransportVehicle.name == "Ford Transit (demo)").limit(1)
+                select(TransportVehicle).where(TransportVehicle.plate_number == "1234 AB-7").limit(1)
             )
             veh = veh_row.scalar_one_or_none()
             if veh is None:
-                veh = await veh_repo.create(**TransportVehicleCreate(name="Ford Transit (demo)", plate_number="1234 AB-7", seats=12).model_dump())
+                veh = await veh_repo.create(
+                    **TransportVehicleCreate(
+                        brand="Ford",
+                        model="Transit (demo)",
+                        plate_number="1234 AB-7",
+                        seats=12,
+                    ).model_dump()
+                )
 
             trip_exists = await session.execute(select(RaftingTrip.id).where(RaftingTrip.notes == "demo trip").limit(1))
             if trip_exists.scalar_one_or_none() is None:

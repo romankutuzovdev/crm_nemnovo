@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.modules.deals.service import DealService
+from app.modules.deals.schemas import DealItemCreate, DealItemUpdate
 from app.modules.orders.schemas import OrderAuditEntryResponse, OrderCreate, OrderUpdate
 from app.shared.enums import DealStatus
 
@@ -36,6 +37,17 @@ class OrderService:
 
     async def transition_status(self, order_id: UUID, status: DealStatus, updated_by: UUID):
         return await self._deal.transition_status(order_id, status=status, updated_by=updated_by)
+
+    async def add_order_item(self, order_id: UUID, data: DealItemCreate, updated_by: UUID):
+        return await self._deal.add_deal_item(order_id, data, updated_by)
+
+    async def update_order_item(
+        self, order_id: UUID, item_id: UUID, data: DealItemUpdate, updated_by: UUID
+    ):
+        return await self._deal.update_deal_item(order_id, item_id, data, updated_by)
+
+    async def delete_order_item(self, order_id: UUID, item_id: UUID, updated_by: UUID):
+        return await self._deal.delete_deal_item(order_id, item_id, updated_by)
 
     async def list_order_audit(self, order_id: UUID, limit: int = 50) -> list[OrderAuditEntryResponse]:
         await self.repo.get_or_raise(order_id)

@@ -34,7 +34,7 @@ PERMISSIONS: dict[str, dict[str, list[str]]] = {
         "notifications": ["read"],
         "reports":       ["read", "export"],
         "reports_analytics": ["read"],
-        "settings":      ["read"],
+        "settings":      ["read", "write"],
         "integrations":  ["read"],
     },
     "manager": {

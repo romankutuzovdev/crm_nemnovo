@@ -147,9 +147,9 @@ export default function StockPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <div>
           <h1 className="text-2xl font-bold">Склад</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Товарные позиции, остатки и учёт для продаж в магазине (по ТЗ). Арендуемые объекты — в разделе
-            «Активы».
+          <p className="text-slate-400 text-sm mt-1 max-w-3xl leading-snug">
+            <strong className="font-medium text-slate-300">Склад</strong> — товары, единицы, остатки и движения (приход/расход). Не путать с разделом{" "}
+            <strong className="font-medium text-slate-300">«Активы»</strong>: там учёт ресурсов под брони и календарь, а не складской товар.
           </p>
         </div>
         {canWrite && (

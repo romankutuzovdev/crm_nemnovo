@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.db.session import AsyncSession
 from app.modules.bookings.models import Booking
 from app.modules.clients.models import Client
+from app.modules.contracts.models import Contract
 from app.modules.deals.models import Deal
 from app.modules.hostel.models import HostelBooking, HostelRoom
 from app.modules.leads.models import Lead
@@ -14,18 +15,45 @@ from app.modules.rafting.models import RaftingRoute, RaftingTrip
 from app.modules.rent.models import RentOrder
 from app.shared.enums import BookingStatus, LeadStatus, ServiceType
 
-# Цвета по типу услуги (по ТЗ — цветовое разделение)
-SERVICE_COLORS = {
-    ServiceType.RAFTING: "#22c55e",
-    ServiceType.HOSTEL: "#3b82f6",
-    ServiceType.RENT: "#f59e0b",
-    ServiceType.COMBINED: "#8b5cf6",
-}
+
+def _deal_payment_snapshot(deal: Deal | None) -> dict:
+    if deal is None:
+        return {
+            "payment_status": None,
+            "total_amount": None,
+            "paid_amount": None,
+            "debt_amount": None,
+        }
+    ta = float(deal.total_amount)
+    pa = float(deal.paid_amount)
+    return {
+        "payment_status": str(deal.payment_status),
+        "total_amount": ta,
+        "paid_amount": pa,
+        "debt_amount": ta - pa,
+    }
+
+
+def _deal_contract_snapshot(deal: Deal) -> dict:
+    num = None
+    comp = None
+    if deal.contract_id and deal.contract:
+        num = deal.contract.number
+        if deal.contract.company:
+            comp = deal.contract.company.name
+    return {
+        "contract_number": num,
+        "contract_company_name": comp,
+        "contract_text": deal.contract_text,
+    }
 
 
 class CalendarRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    def _color(self, color_map: dict[str, str], key: str) -> str:
+        return color_map.get(key) or "#6b7280"
 
     async def get_events(
         self,
@@ -34,8 +62,10 @@ class CalendarRepository:
         asset_id: UUID | None = None,
         manager_id: UUID | None = None,
         service_type: str | None = None,
+        color_map: dict[str, str] | None = None,
     ) -> list[dict]:
         """Возвращает события для календаря: бронирования и заявки."""
+        colors = color_map or {}
         events: list[dict] = []
         # Keep boundaries timezone-naive to match datetimes loaded from DB (SQLite/Postgres setup).
         start_dt = datetime.combine(start, time.min)
@@ -48,6 +78,7 @@ class CalendarRepository:
                 selectinload(Deal.client),
                 selectinload(Deal.bookings).selectinload(Booking.asset),
                 selectinload(Deal.items),
+                selectinload(Deal.contract).selectinload(Contract.company),
             )
             .where(
                 Deal.bookings.any(
@@ -115,7 +146,9 @@ class CalendarRepository:
                 "service_types": service_types,
                 "status": str(deal.status),
                 "assigned_to": deal.assigned_to,
-                "color": SERVICE_COLORS.get(deal.service_type, "#6b7280"),
+                "color": self._color(colors, str(deal.service_type)),
+                **_deal_payment_snapshot(deal),
+                **_deal_contract_snapshot(deal),
             })
 
         # События подсистем без прямой привязки к assets
@@ -167,7 +200,8 @@ class CalendarRepository:
                     "service_types": [ServiceType.HOSTEL.value],
                     "status": booking.status,
                     "assigned_to": deal.assigned_to if deal else None,
-                    "color": SERVICE_COLORS.get(ServiceType.HOSTEL, "#6b7280"),
+                    "color": self._color(colors, ServiceType.HOSTEL.value),
+                    **_deal_payment_snapshot(deal),
                 })
 
             # Заказы аренды
@@ -214,7 +248,8 @@ class CalendarRepository:
                     "service_types": [ServiceType.RENT.value],
                     "status": order.status,
                     "assigned_to": deal.assigned_to if deal else None,
-                    "color": SERVICE_COLORS.get(ServiceType.RENT, "#6b7280"),
+                    "color": self._color(colors, ServiceType.RENT.value),
+                    **_deal_payment_snapshot(deal),
                 })
 
             # Сплавы
@@ -262,7 +297,8 @@ class CalendarRepository:
                     "service_types": [ServiceType.RAFTING.value],
                     "status": trip.status,
                     "assigned_to": deal.assigned_to if deal else None,
-                    "color": SERVICE_COLORS.get(ServiceType.RAFTING, "#6b7280"),
+                    "color": self._color(colors, ServiceType.RAFTING.value),
+                    **_deal_payment_snapshot(deal),
                 })
 
         # Заявки (leads) — активные, без конвертации (без привязки к активу)
@@ -270,7 +306,8 @@ class CalendarRepository:
             return events
 
         lead_stmt = (
-            select(Lead)
+            select(Lead, Client)
+            .outerjoin(Client, Client.id == Lead.client_id)
             .where(
                 and_(
                     Lead.status.in_([LeadStatus.NEW, LeadStatus.IN_PROGRESS]),
@@ -287,16 +324,22 @@ class CalendarRepository:
             lead_stmt = lead_stmt.where(Lead.service_type == service_type)
 
         lead_result = await self.session.execute(lead_stmt)
-        for lead in lead_result.scalars().all():
+        for lead, client_row in lead_result.all():
             ev_date = lead.preferred_date or lead.created_at.date()
             ev_start = datetime.combine(ev_date, time(9, 0))
             ev_end = datetime.combine(ev_date, time(10, 0))
             if ev_start < start_dt or ev_end > end_dt:
                 continue
             st = lead.service_type or "заявка"
+            client_name = None
+            if client_row:
+                client_name = f"{client_row.first_name} {client_row.last_name}".strip() or None
+            title = f"Заявка: {st}"
+            if client_name:
+                title = f"{title} — {client_name}"
             events.append({
                 "id": f"lead:{lead.id}",
-                "title": f"Заявка: {st}",
+                "title": title,
                 "start": ev_start.isoformat(),
                 "end": ev_end.isoformat(),
                 "all_day": False,
@@ -307,11 +350,12 @@ class CalendarRepository:
                 "asset_id": None,
                 "asset_name": None,
                 "client_id": lead.client_id,
-                "client_name": None,
+                "client_name": client_name,
                 "service_type": st,
-                "status": lead.status,
+                "service_types": [st],
+                "status": str(lead.status),
                 "assigned_to": lead.assigned_to,
-                "color": "#ef4444",  # красный для заявок
+                "color": self._color(colors, "lead"),
             })
 
         return events

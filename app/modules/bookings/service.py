@@ -9,7 +9,7 @@ from app.modules.bookings.models import Booking
 from app.modules.bookings.repository import BookingRepository
 from app.modules.bookings.schemas import BookingCreate, BookingUpdate
 from app.modules.deals.repository import DealRepository
-from app.shared.enums import AuditAction, BookingStatus
+from app.shared.enums import AuditAction, BookingStatus, DealStatus
 
 
 class BookingService:
@@ -29,6 +29,12 @@ class BookingService:
         if conflict:
             raise AssetConflictError(asset.name)
 
+        booking_status = (
+            BookingStatus.PENDING
+            if order.status == DealStatus.NEW.value
+            else BookingStatus.CONFIRMED
+        )
+
         async with self.session.begin():
             booking = Booking(
                 deal_id=order.id,
@@ -36,7 +42,7 @@ class BookingService:
                 start_datetime=data.start_datetime,
                 end_datetime=data.end_datetime,
                 quantity=data.quantity,
-                status=BookingStatus.CONFIRMED,
+                status=booking_status,
             )
             self.session.add(booking)
             await self.session.flush()

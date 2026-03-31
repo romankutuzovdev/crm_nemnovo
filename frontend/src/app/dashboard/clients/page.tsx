@@ -32,6 +32,7 @@ export default function ClientsPage() {
     last_name: "",
     phone: "",
     email: "",
+    comment: "",
   });
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function ClientsPage() {
           last_name: createForm.last_name.trim(),
           phone: createForm.phone.trim(),
           email: createForm.email.trim() ? createForm.email.trim() : null,
+          comment: createForm.comment.trim() ? createForm.comment.trim() : null,
           source: "manual",
           tags: [],
         }),
@@ -68,7 +70,7 @@ export default function ClientsPage() {
     onSuccess: (client) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       setShowCreate(false);
-      setCreateForm({ first_name: "", last_name: "", phone: "", email: "" });
+      setCreateForm({ first_name: "", last_name: "", phone: "", email: "", comment: "" });
       router.push(`/dashboard/clients/${client.id}`);
     },
   });
@@ -90,7 +92,7 @@ export default function ClientsPage() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск: имя, телефон, email…"
+            placeholder="Поиск: имя, телефон, email, комментарий…"
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-sm min-w-[220px] flex-1 sm:flex-none"
           />
           <button
@@ -103,6 +105,9 @@ export default function ClientsPage() {
         </div>
       </div>
 
+      <p className="text-slate-400 text-sm mb-2 max-w-3xl leading-snug">
+        Карточки физлиц: контакты и история; используются в заказах, заявках и при создании мероприятий в календаре.
+      </p>
       <p className="text-slate-500 text-sm mb-3">
         Найдено: {total}
         {debouncedSearch ? ` по запросу «${debouncedSearch}»` : ""}
@@ -176,6 +181,16 @@ export default function ClientsPage() {
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
                   value={createForm.email}
                   onChange={(e) => setCreateForm((s) => ({ ...s, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Комментарий</label>
+                <textarea
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  placeholder="Заметка к карточке…"
+                  value={createForm.comment}
+                  onChange={(e) => setCreateForm((s) => ({ ...s, comment: e.target.value }))}
                 />
               </div>
             </div>

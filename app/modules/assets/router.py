@@ -11,6 +11,8 @@ from app.modules.assets.schemas import (
     AssetCreate,
     AssetMaintenanceCreate,
     AssetMaintenanceResponse,
+    AssetQuantityChangeResponse,
+    AssetQuantitySetRequest,
     AssetResponse,
     AssetStatusPatch,
     AssetUpdate,
@@ -146,6 +148,28 @@ async def transition_asset_status(
 ):
     service = AssetService(db)
     return await service.transition_asset_status(asset_id, data.status, updated_by=current_user.id)
+
+
+@router.get("/{asset_id}/quantity-changes", response_model=list[AssetQuantityChangeResponse])
+async def list_asset_quantity_changes(
+    asset_id: UUID,
+    limit: int = Query(100, ge=1, le=500),
+    current_user=require_permission("assets", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = AssetService(db)
+    return await service.list_asset_quantity_changes(asset_id, limit=limit)
+
+
+@router.post("/{asset_id}/quantity", response_model=AssetResponse)
+async def set_asset_quantity(
+    asset_id: UUID,
+    data: AssetQuantitySetRequest,
+    current_user=require_permission("assets", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    service = AssetService(db)
+    return await service.set_asset_quantity(asset_id, data, updated_by=current_user.id)
 
 
 @router.get("/{asset_id}/audit", response_model=list[AssetAuditEntryResponse])

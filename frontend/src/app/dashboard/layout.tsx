@@ -63,6 +63,7 @@ export default function DashboardLayout({
     { href: "/dashboard/companies", label: "Компании" },
     { href: "/dashboard/orders", label: "Заказы" },
     { href: "/dashboard/rafting", label: "Сплавы" },
+    { href: "/dashboard/excursions", label: "Экскурсии" },
     { href: "/dashboard/hostel", label: "Хостел" },
     { href: "/dashboard/rent", label: "Аренда" },
     { href: "/dashboard/payments", label: "Оплаты" },

@@ -32,6 +32,14 @@ interface Paginated<T> {
   items: T[];
 }
 
+const LEAD_SOURCE_LABELS: Record<string, string> = {
+  site_form: "Сайт",
+  telephony: "Телефония",
+  manual: "Вручную",
+  referral: "Реферал",
+  calendar: "Календарь",
+};
+
 interface AssignableUser {
   id: string;
   full_name: string;
@@ -178,7 +186,10 @@ export default function LeadsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Заявки</h1>
+      <h1 className="text-2xl font-bold">Заявки</h1>
+      <p className="text-slate-400 text-sm mt-1 mb-4 max-w-3xl leading-snug">
+        Входящие лиды (источник, услуга, комментарий). Привязка к клиенту, смена статуса и конвертация в заказ — из строки таблицы.
+      </p>
       {leads.length > 0 ? (
         <div className="rounded-xl border border-border overflow-x-auto bg-surface">
           <table className="w-full min-w-[960px]">
@@ -202,7 +213,9 @@ export default function LeadsPage() {
                     <td className="p-3 text-sm whitespace-nowrap">
                       {new Date(l.created_at).toLocaleString("ru")}
                     </td>
-                    <td className="p-3 text-sm">{l.source}</td>
+                    <td className="p-3 text-sm">
+                      {LEAD_SOURCE_LABELS[l.source] ?? l.source}
+                    </td>
                     <td className="p-3 text-sm">
                       {l.client_id ? (
                         <Link

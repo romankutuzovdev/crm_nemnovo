@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from uuid import UUID
 
+from pydantic import Field
+
 from app.shared.base_schema import BaseSchema, UUIDSchema
 from app.shared.enums import AssetStatus
 
@@ -14,14 +16,16 @@ class AssetCreate(BaseSchema):
     category_id: int
     name: str
     code: str
-    capacity: int = 1
+    capacity: int = Field(default=1, ge=1)
+    quantity: int = Field(default=1, ge=0)
     description: str | None = None
     meta: dict | None = None
 
 
 class AssetUpdate(BaseSchema):
     name: str | None = None
-    capacity: int | None = None
+    capacity: int | None = Field(default=None, ge=1)
+    quantity: int | None = Field(default=None, ge=0)
     status: AssetStatus | None = None
     description: str | None = None
     meta: dict | None = None
@@ -32,9 +36,26 @@ class AssetResponse(UUIDSchema):
     name: str
     code: str
     capacity: int
+    quantity: int
     status: str
     description: str | None
     meta: dict | None = None
+
+
+class AssetQuantitySetRequest(BaseSchema):
+    quantity: int = Field(..., ge=0)
+    reason: str | None = None
+
+
+class AssetQuantityChangeResponse(UUIDSchema):
+    asset_id: UUID
+    previous_quantity: int
+    new_quantity: int
+    delta: int
+    reason: str | None
+    created_by: UUID
+    user_name: str
+    created_at: datetime
 
 
 class AssetAuditEntryResponse(UUIDSchema):

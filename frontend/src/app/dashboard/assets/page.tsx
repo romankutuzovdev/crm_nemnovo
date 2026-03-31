@@ -15,6 +15,7 @@ interface Asset {
   name: string;
   code: string;
   capacity: number;
+  quantity: number;
   status: string;
   category: AssetCategory;
 }
@@ -50,8 +51,11 @@ export default function AssetsPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Активы</h1>
-      <p className="text-slate-400 text-sm mb-4">
-        Карточка актива: статусы с валидацией переходов, аудит и история обслуживания.
+      <p className="text-slate-400 text-sm mb-4 max-w-3xl leading-snug">
+        Ресурсы для бронирований. Для байдарок: колонка «Мест» — сколько человек на одну единицу, «Кол-во» — число единиц
+        в парке (учёт с историей в карточке). Используются в календаре в блоке{" "}
+        <strong className="font-medium text-slate-300">«Слоты»</strong> мероприятий и при проверке пересечений. Детали
+        актива — по клику в таблицу.
       </p>
       {assets.length > 0 ? (
         <div className="rounded-xl border border-slate-700 overflow-hidden">
@@ -62,7 +66,8 @@ export default function AssetsPage() {
                 <th className="text-left p-4">Код</th>
                 <th className="text-left p-4">Категория</th>
                 <th className="text-left p-4">Статус</th>
-                <th className="text-left p-4">Вместимость</th>
+                <th className="text-left p-4">Мест / ед.</th>
+                <th className="text-left p-4">Кол-во ед.</th>
               </tr>
             </thead>
             <tbody>
@@ -77,6 +82,7 @@ export default function AssetsPage() {
                   <td className="p-4 text-slate-300">{a.category.name}</td>
                   <td className="p-4">{statusRu[a.status] ?? a.status}</td>
                   <td className="p-4">{a.capacity}</td>
+                  <td className="p-4">{a.quantity}</td>
                 </tr>
               ))}
             </tbody>

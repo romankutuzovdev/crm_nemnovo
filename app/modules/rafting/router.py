@@ -13,7 +13,9 @@ from app.modules.rafting.repository import (
     RaftingTripRepository,
     TransportVehicleRepository,
 )
+from app.modules.rafting.schedule import ensure_rafting_schedule_free
 from app.modules.rafting.schemas import (
+    InstructorUsageGroup,
     RaftingInstructorCreate,
     RaftingInstructorResponse,
     RaftingInstructorUpdate,
@@ -23,10 +25,12 @@ from app.modules.rafting.schemas import (
     RaftingTripCreate,
     RaftingTripResponse,
     RaftingTripUpdate,
+    TransportUsageGroup,
     TransportVehicleCreate,
     TransportVehicleResponse,
     TransportVehicleUpdate,
 )
+from app.modules.rafting.usage import build_instructor_usage, build_transport_usage, normalize_usage_range
 
 router = APIRouter(prefix="/rafting", tags=["rafting"])
 
@@ -99,6 +103,21 @@ async def update_instructor(
     return await repo.update(instructor_id, **data.model_dump(exclude_none=True))
 
 
+@router.get("/instructors/usage", response_model=list[InstructorUsageGroup])
+async def list_instructors_usage(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    current_user=require_permission("orders", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    df, dt = normalize_usage_range(date_from, date_to)
+    trip_repo = RaftingTripRepository(db)
+    instr_repo = RaftingInstructorRepository(db)
+    rows = await trip_repo.list_with_route_and_vehicle_for_usage(date_from=df, date_to=dt)
+    instructors = await instr_repo.list(offset=0, limit=200)
+    return build_instructor_usage(instructors, rows)
+
+
 # Transport
 @router.get("/transport", response_model=list[TransportVehicleResponse])
 async def list_transport(
@@ -111,6 +130,21 @@ async def list_transport(
     return await repo.list(offset=offset, limit=limit)
 
 
+@router.get("/transport/usage", response_model=list[TransportUsageGroup])
+async def list_transport_usage(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    current_user=require_permission("orders", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    df, dt = normalize_usage_range(date_from, date_to)
+    trip_repo = RaftingTripRepository(db)
+    veh_repo = TransportVehicleRepository(db)
+    rows = await trip_repo.list_with_route_and_vehicle_for_usage(date_from=df, date_to=dt)
+    vehicles = await veh_repo.list(offset=0, limit=200)
+    return build_transport_usage(vehicles, rows)
+
+
 @router.post("/transport", response_model=TransportVehicleResponse, status_code=201)
 async def create_transport(
     data: TransportVehicleCreate,
@@ -118,7 +152,9 @@ async def create_transport(
     db: AsyncSession = Depends(get_db),
 ):
     repo = TransportVehicleRepository(db)
-    return await repo.create(**data.model_dump())
+    body = data.model_dump()
+    body["brand"] = (body.get("brand") or "").strip()
+    return await repo.create(**body)
 
 
 @router.patch("/transport/{vehicle_id}", response_model=TransportVehicleResponse)
@@ -130,7 +166,10 @@ async def update_transport(
 ):
     repo = TransportVehicleRepository(db)
     await repo.get_or_raise(vehicle_id)
-    return await repo.update(vehicle_id, **data.model_dump(exclude_none=True))
+    body = data.model_dump(exclude_none=True)
+    if "brand" in body and body["brand"] is not None:
+        body["brand"] = str(body["brand"]).strip()
+    return await repo.update(vehicle_id, **body)
 
 
 async def _validate_trip_refs(
@@ -180,6 +219,14 @@ async def create_trip(
         vehicle_id=data.vehicle_id,
         deal_id=data.deal_id,
     )
+    await ensure_rafting_schedule_free(
+        db,
+        trip_date=data.trip_date,
+        trip_start_time=data.trip_start_time,
+        route_id=data.route_id,
+        instructor_id=data.instructor_id,
+        vehicle_id=data.vehicle_id,
+    )
     repo = RaftingTripRepository(db)
     payload = data.model_dump()
     if data.instructor_id is not None:
@@ -208,6 +255,17 @@ async def update_trip(
         instructor_id=instructor_id,
         vehicle_id=vehicle_id,
         deal_id=deal_id,
+    )
+    trip_date = payload.get("trip_date", existing.trip_date)
+    trip_start_time = payload.get("trip_start_time", existing.trip_start_time)
+    await ensure_rafting_schedule_free(
+        db,
+        trip_date=trip_date,
+        trip_start_time=trip_start_time,
+        route_id=route_id,
+        instructor_id=instructor_id,
+        vehicle_id=vehicle_id,
+        exclude_trip_id=trip_id,
     )
     # Пересчёт выплаты инструктору, если изменились instructor_id/guests_count, и сплав ещё не помечен как оплаченный.
     if not existing.instructor_paid and ("instructor_id" in payload or "guests_count" in payload):

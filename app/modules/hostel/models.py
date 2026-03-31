@@ -44,6 +44,8 @@ class HostelBooking(Base):
     )
     check_in: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     check_out: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    guests_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    price_per_person_per_night: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     total_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     status: Mapped[str] = mapped_column(String(30), default=BookingStatus.PENDING, nullable=False, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

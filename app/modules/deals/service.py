@@ -3,6 +3,7 @@ from datetime import date
 from uuid import UUID
 
 import structlog
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import write_audit_log
@@ -10,9 +11,10 @@ from app.core.exceptions import AssetConflictError, NotFoundError, ValidationErr
 from app.modules.assets.repository import AssetRepository
 from app.modules.bookings.models import Booking
 from app.modules.clients.repository import ClientRepository
+from app.modules.contracts.repository import ContractRepository
 from app.modules.deals.models import Deal, DealItem
 from app.modules.deals.repository import DealItemRepository, DealRepository
-from app.modules.deals.schemas import DealCreate, DealUpdate
+from app.modules.deals.schemas import DealCreate, DealItemCreate, DealItemUpdate, DealUpdate
 from app.shared.enums import AuditAction, BookingStatus, DealStatus
 
 logger = structlog.get_logger()
@@ -53,18 +55,41 @@ class DealService:
                 f"Недопустимый переход статуса: {current.value} -> {target.value}"
             )
 
+    async def _confirm_pending_bookings(self, deal_id: UUID) -> None:
+        await self.session.execute(
+            update(Booking)
+            .where(
+                Booking.deal_id == deal_id,
+                Booking.status == BookingStatus.PENDING,
+            )
+            .values(status=BookingStatus.CONFIRMED)
+        )
+
     async def transition_status(self, deal_id: UUID, status: DealStatus, updated_by: UUID) -> Deal:
         deal = await self.repo.get_or_raise(deal_id)
+        old_status = deal.status
         self._validate_status_transition(deal.status, status.value)
+        update_kw: dict = {"status": status}
+        if (
+            status == DealStatus.CONFIRMED
+            and old_status == DealStatus.NEW.value
+            and deal.assigned_to is None
+        ):
+            update_kw["assigned_to"] = updated_by
+        after_audit: dict = {"status": status.value}
+        if update_kw.get("assigned_to") is not None:
+            after_audit["assigned_to"] = str(update_kw["assigned_to"])
         async with self._tx():
-            deal = await self.repo.update(deal_id, status=status)
+            deal = await self.repo.update(deal_id, **update_kw)
+            if status == DealStatus.CONFIRMED and old_status == DealStatus.NEW.value:
+                await self._confirm_pending_bookings(deal_id)
             await write_audit_log(
                 self.session,
                 updated_by,
                 AuditAction.UPDATE,
                 "deals",
                 deal_id,
-                after={"status": status.value},
+                after=after_audit,
             )
         return deal
 
@@ -84,18 +109,26 @@ class DealService:
             if has_conflict:
                 raise AssetConflictError(asset.name)
 
+        if data.contract_id is not None:
+            await ContractRepository(self.session).get_or_raise(data.contract_id)
+
         # Calculate totals
-        items_data = [
-            {
-                "description": item.description,
-                "quantity": item.quantity,
-                "unit_price": item.unit_price,
-                "total_price": item.quantity * item.unit_price,
-                "asset_id": item.asset_id,
-                "product_id": item.product_id,
-            }
-            for item in data.items
-        ]
+        items_data = []
+        for item in data.items:
+            if item.client_id is not None:
+                await self.client_repo.get_or_raise(item.client_id)
+            items_data.append(
+                {
+                    "description": item.description,
+                    "item_kind": item.item_kind,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                    "total_price": item.quantity * item.unit_price,
+                    "asset_id": item.asset_id,
+                    "product_id": item.product_id,
+                    "client_id": item.client_id,
+                }
+            )
         total_amount = sum(i["total_price"] for i in items_data)
 
         async with self._tx():
@@ -112,8 +145,10 @@ class DealService:
                 total_amount=total_amount,
                 paid_amount=0.0,
                 notes=data.notes,
+                contract_id=data.contract_id,
+                contract_text=data.contract_text,
                 created_by=created_by,
-                assigned_to=created_by,
+                assigned_to=None,
             )
             self.session.add(deal)
             await self.session.flush()  # Get deal.id
@@ -130,7 +165,7 @@ class DealService:
                     start_datetime=b.start_datetime,
                     end_datetime=b.end_datetime,
                     quantity=b.quantity,
-                    status=BookingStatus.CONFIRMED,
+                    status=BookingStatus.PENDING,
                 ))
 
             # Mark lead as converted
@@ -153,7 +188,8 @@ class DealService:
 
     async def update_deal(self, deal_id: UUID, data: DealUpdate, updated_by: UUID) -> Deal:
         deal = await self.repo.get_or_raise(deal_id)
-        update_data = data.model_dump(exclude_none=True)
+        update_data = data.model_dump(exclude_unset=True)
+        old_status = deal.status
 
         start: date = update_data.get("start_date", deal.start_date)
         end: date = update_data.get("end_date", deal.end_date)
@@ -161,11 +197,27 @@ class DealService:
             raise ValidationError("Дата окончания не может быть раньше даты начала")
         if "guests_count" in update_data and update_data["guests_count"] < 1:
             raise ValidationError("Число гостей должно быть не меньше 1")
+        cid = update_data.get("contract_id")
+        if cid is not None:
+            await ContractRepository(self.session).get_or_raise(cid)
         if "status" in update_data:
             self._validate_status_transition(deal.status, str(update_data["status"]))
 
+        new_st = update_data.get("status")
+        new_status_val = getattr(new_st, "value", new_st) if new_st is not None else None
+        becoming_confirmed = new_status_val == DealStatus.CONFIRMED.value
+        if (
+            becoming_confirmed
+            and old_status == DealStatus.NEW.value
+            and deal.assigned_to is None
+            and "assigned_to" not in update_data
+        ):
+            update_data["assigned_to"] = updated_by
+
         async with self._tx():
             deal = await self.repo.update(deal_id, **update_data)
+            if becoming_confirmed and old_status == DealStatus.NEW.value:
+                await self._confirm_pending_bookings(deal_id)
             await write_audit_log(
                 self.session, updated_by, AuditAction.UPDATE, "deals", deal_id, after=update_data
             )
@@ -197,3 +249,110 @@ class DealService:
         if not deal:
             raise NotFoundError(f"Deal {deal_id} not found")
         return deal
+
+    async def _recalculate_deal_total(self, deal_id: UUID) -> None:
+        deal = await self.repo.get_or_raise(deal_id)
+        res = await self.session.execute(
+            select(func.coalesce(func.sum(DealItem.total_price), 0)).where(DealItem.deal_id == deal_id)
+        )
+        deal.total_amount = float(res.scalar_one() or 0)
+        deal.recalculate_payment_status()
+
+    async def add_deal_item(self, deal_id: UUID, data: DealItemCreate, updated_by: UUID) -> Deal:
+        deal = await self.repo.get_or_raise(deal_id)
+        if deal.status == DealStatus.CANCELLED.value:
+            raise ValidationError("Нельзя добавлять позиции в отменённый заказ")
+        if data.client_id is not None:
+            await self.client_repo.get_or_raise(data.client_id)
+        async with self._tx():
+            self.session.add(
+                DealItem(
+                    deal_id=deal_id,
+                    client_id=data.client_id,
+                    asset_id=data.asset_id,
+                    product_id=data.product_id,
+                    description=data.description,
+                    item_kind=data.item_kind,
+                    quantity=data.quantity,
+                    unit_price=data.unit_price,
+                    total_price=data.quantity * data.unit_price,
+                )
+            )
+            await self.session.flush()
+            await self._recalculate_deal_total(deal_id)
+            await write_audit_log(
+                self.session,
+                updated_by,
+                AuditAction.UPDATE,
+                "deals",
+                deal_id,
+                after={"add_item": data.description[:200]},
+            )
+        deal_out = await self.repo.get_with_relations(deal_id)
+        if not deal_out:
+            raise NotFoundError(f"Deal {deal_id} not found")
+        return deal_out
+
+    async def update_deal_item(
+        self, deal_id: UUID, item_id: UUID, data: DealItemUpdate, updated_by: UUID
+    ) -> Deal:
+        deal = await self.repo.get_or_raise(deal_id)
+        if deal.status == DealStatus.CANCELLED.value:
+            raise ValidationError("Нельзя менять позиции в отменённом заказе")
+        result = await self.session.execute(
+            select(DealItem).where(DealItem.id == item_id, DealItem.deal_id == deal_id)
+        )
+        item = result.scalar_one_or_none()
+        if not item:
+            raise NotFoundError("Позиция не найдена")
+        payload = data.model_dump(exclude_unset=True)
+        async with self._tx():
+            if "description" in payload:
+                item.description = str(payload["description"])
+            if "item_kind" in payload:
+                item.item_kind = str(payload["item_kind"])
+            if "quantity" in payload:
+                item.quantity = int(payload["quantity"])
+            if "unit_price" in payload:
+                item.unit_price = float(payload["unit_price"])
+            if any(k in payload for k in ("quantity", "unit_price")):
+                item.total_price = float(item.quantity) * float(item.unit_price)
+            await self.session.flush()
+            await self._recalculate_deal_total(deal_id)
+            await write_audit_log(
+                self.session,
+                updated_by,
+                AuditAction.UPDATE,
+                "deals",
+                deal_id,
+                after={"update_item": str(item_id)},
+            )
+        deal_out = await self.repo.get_with_relations(deal_id)
+        if not deal_out:
+            raise NotFoundError(f"Deal {deal_id} not found")
+        return deal_out
+
+    async def delete_deal_item(self, deal_id: UUID, item_id: UUID, updated_by: UUID) -> Deal:
+        await self.repo.get_or_raise(deal_id)
+        result = await self.session.execute(
+            select(DealItem).where(DealItem.id == item_id, DealItem.deal_id == deal_id)
+        )
+        item = result.scalar_one_or_none()
+        if not item:
+            raise NotFoundError("Позиция не найдена")
+        async with self._tx():
+            self.session.delete(item)
+            await self.session.flush()
+            await self._recalculate_deal_total(deal_id)
+            await write_audit_log(
+                self.session,
+                updated_by,
+                AuditAction.UPDATE,
+                "deals",
+                deal_id,
+                after={"delete_item": str(item_id)},
+            )
+        deal_out = await self.repo.get_with_relations(deal_id)
+        if not deal_out:
+            raise NotFoundError(f"Deal {deal_id} not found")
+        return deal_out
