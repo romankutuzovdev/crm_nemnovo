@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8888";
 const API_PREFIX = "/api/v1";
 
 /** Иначе при недоступном API кнопка «Войти» висит в «Вход...» без ошибки. */

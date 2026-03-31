@@ -29,6 +29,7 @@ from app.core.config import settings
 from app.modules.assets.models import Asset, AssetCategory, AssetMaintenance, Product, StockMovement
 from app.modules.bookings.models import Booking
 from app.modules.clients.models import Client, ClientNote, Company
+from app.modules.contracts.models import Contract  # noqa: F401 — для связей Company.contracts / Deal.contract
 from app.modules.deals.models import Deal, DealItem
 from app.modules.hostel.models import HostelBooking, HostelGuest, HostelRoom
 from app.modules.integrations.models import IntegrationConfig, WebhookLog

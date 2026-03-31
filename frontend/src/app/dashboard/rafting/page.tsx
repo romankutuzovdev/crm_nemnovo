@@ -8,7 +8,6 @@ import { useAuthStore } from "@/store/auth";
 interface RouteRow {
   id: string;
   name: string;
-  difficulty: string | null;
   duration_hours: number | null;
   default_price_per_person: number | null;
   is_active: boolean;
@@ -520,7 +519,6 @@ export default function RaftingPage() {
                   <tr>
                     <th className="text-left p-4">Название</th>
                     <th className="text-left p-4">₽/чел (умолч.)</th>
-                    <th className="text-left p-4">Сложн.</th>
                     <th className="text-left p-4">Часы</th>
                     <th className="text-left p-4">Активен</th>
                   </tr>
@@ -534,14 +532,13 @@ export default function RaftingPage() {
                           ? `${Number(r.default_price_per_person).toLocaleString("ru")} ₽`
                           : "—"}
                       </td>
-                      <td className="p-4 text-slate-400">{r.difficulty ?? "—"}</td>
                       <td className="p-4 text-slate-400">{r.duration_hours ?? "—"}</td>
                       <td className="p-4">{r.is_active ? "да" : "нет"}</td>
                     </tr>
                   ))}
                   {routes.length === 0 && (
                     <tr className="border-t border-slate-700">
-                      <td className="p-4 text-slate-500" colSpan={5}>
+                      <td className="p-4 text-slate-500" colSpan={4}>
                         Маршрутов пока нет
                       </td>
                     </tr>

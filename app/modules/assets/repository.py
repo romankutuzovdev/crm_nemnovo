@@ -76,8 +76,8 @@ class AssetRepository(BaseRepository[Asset]):
             select(AssetMaintenance.asset_id)
             .where(
                 and_(
-                    func.cast(AssetMaintenance.start_date, type_=None) <= start.date(),
-                    func.cast(AssetMaintenance.end_date, type_=None) >= start.date(),
+                    AssetMaintenance.start_date <= start.date(),
+                    AssetMaintenance.end_date >= start.date(),
                 )
             )
         )

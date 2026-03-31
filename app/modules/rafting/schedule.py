@@ -37,6 +37,16 @@ def _trip_window(
     return start, end
 
 
+def trip_window(
+    *,
+    trip_date: date,
+    trip_start_time: time | None,
+    route: RaftingRoute | None,
+) -> tuple[datetime, datetime]:
+    """Окно сплава для календаря/проверок: полуинтервал [start, end) в наивном локальном времени."""
+    return _trip_window(trip_date, trip_start_time, route)
+
+
 def _windows_overlap(
     a: tuple[datetime, datetime],
     b: tuple[datetime, datetime],

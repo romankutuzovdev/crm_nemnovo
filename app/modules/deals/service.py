@@ -91,7 +91,8 @@ class DealService:
                 deal_id,
                 after=after_audit,
             )
-        return deal
+        # Return with relations to avoid lazy-load in response serialization (async context)
+        return await self.get_deal(deal_id)
 
     async def create_deal(self, data: DealCreate, created_by: UUID) -> Deal:
         # Validate client exists
@@ -221,7 +222,8 @@ class DealService:
             await write_audit_log(
                 self.session, updated_by, AuditAction.UPDATE, "deals", deal_id, after=update_data
             )
-        return deal
+        # Return with relations to avoid lazy-load in response serialization (async context)
+        return await self.get_deal(deal_id)
 
     async def cancel_deal(self, deal_id: UUID, cancelled_by: UUID) -> Deal:
         deal = await self.repo.get_or_raise(deal_id)
@@ -242,7 +244,8 @@ class DealService:
                 self.session, cancelled_by, AuditAction.UPDATE, "deals", deal_id,
                 after={"status": DealStatus.CANCELLED},
             )
-        return deal
+        # Return with relations to avoid lazy-load in response serialization (async context)
+        return await self.get_deal(deal_id)
 
     async def get_deal(self, deal_id: UUID) -> Deal:
         deal = await self.repo.get_with_relations(deal_id)

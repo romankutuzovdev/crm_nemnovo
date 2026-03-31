@@ -35,31 +35,30 @@ class BookingService:
             else BookingStatus.CONFIRMED
         )
 
-        async with self.session.begin():
-            booking = Booking(
-                deal_id=order.id,
-                asset_id=data.asset_id,
-                start_datetime=data.start_datetime,
-                end_datetime=data.end_datetime,
-                quantity=data.quantity,
-                status=booking_status,
-            )
-            self.session.add(booking)
-            await self.session.flush()
+        booking = Booking(
+            deal_id=order.id,
+            asset_id=data.asset_id,
+            start_datetime=data.start_datetime,
+            end_datetime=data.end_datetime,
+            quantity=data.quantity,
+            status=booking_status,
+        )
+        self.session.add(booking)
+        await self.session.flush()
 
-            await write_audit_log(
-                self.session,
-                created_by,
-                AuditAction.CREATE,
-                "bookings",
-                booking.id,
-                after={
-                    "order_id": str(order.id),
-                    "asset_id": str(booking.asset_id),
-                    "start": booking.start_datetime.isoformat(),
-                    "end": booking.end_datetime.isoformat(),
-                },
-            )
+        await write_audit_log(
+            self.session,
+            created_by,
+            AuditAction.CREATE,
+            "bookings",
+            booking.id,
+            after={
+                "order_id": str(order.id),
+                "asset_id": str(booking.asset_id),
+                "start": booking.start_datetime.isoformat(),
+                "end": booking.end_datetime.isoformat(),
+            },
+        )
         return booking
 
     async def update_for_order(
@@ -83,18 +82,17 @@ class BookingService:
         if conflict:
             raise AssetConflictError(asset.name)
 
-        async with self.session.begin():
-            for k, v in update.items():
-                setattr(booking, k, v)
+        for k, v in update.items():
+            setattr(booking, k, v)
 
-            await write_audit_log(
-                self.session,
-                updated_by,
-                AuditAction.UPDATE,
-                "bookings",
-                booking.id,
-                after={k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in update.items()},
-            )
+        await write_audit_log(
+            self.session,
+            updated_by,
+            AuditAction.UPDATE,
+            "bookings",
+            booking.id,
+            after={k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in update.items()},
+        )
         return booking
 
     async def cancel_for_order(self, order_id: UUID, booking_id: UUID, cancelled_by: UUID) -> Booking:
@@ -102,15 +100,14 @@ class BookingService:
         if not booking:
             raise NotFoundError("Бронирование не найдено")
 
-        async with self.session.begin():
-            booking.status = BookingStatus.CANCELLED
-            await write_audit_log(
-                self.session,
-                cancelled_by,
-                AuditAction.UPDATE,
-                "bookings",
-                booking.id,
-                after={"status": BookingStatus.CANCELLED},
-            )
+        booking.status = BookingStatus.CANCELLED
+        await write_audit_log(
+            self.session,
+            cancelled_by,
+            AuditAction.UPDATE,
+            "bookings",
+            booking.id,
+            after={"status": BookingStatus.CANCELLED},
+        )
         return booking
 

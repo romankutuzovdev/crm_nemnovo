@@ -40,39 +40,42 @@ class PaymentService:
         if data.amount <= 0:
             raise ValidationError("Payment amount must be positive")
 
-        async with self.session.begin():
-            # Pessimistic lock to prevent race conditions
-            payment = Payment(
-                deal_id=data.deal_id,
-                amount=data.amount,
-                method=data.method,
-                status=PaymentTxStatus.CONFIRMED,
-                confirmed_by=confirmed_by,
-                paid_at=datetime.now(timezone.utc),
-                notes=data.notes,
-            )
-            self.session.add(payment)
-            await self.session.flush()
+        # Pessimistic lock to prevent race conditions (must run in request transaction)
+        payment = Payment(
+            deal_id=data.deal_id,
+            amount=data.amount,
+            method=data.method,
+            status=PaymentTxStatus.CONFIRMED,
+            confirmed_by=confirmed_by,
+            paid_at=datetime.now(timezone.utc),
+            notes=data.notes,
+        )
+        self.session.add(payment)
+        await self.session.flush()
 
-            new_paid, new_status = await self._recalc_deal_payment_aggregates(data.deal_id)
+        new_paid, new_status = await self._recalc_deal_payment_aggregates(data.deal_id)
 
-            await write_audit_log(
-                self.session, confirmed_by, AuditAction.CREATE, "payments", payment.id,
-                after={
-                    "deal_id": str(data.deal_id),
-                    "amount": data.amount,
-                    "method": data.method,
-                    "new_deal_paid": new_paid,
-                    "new_deal_status": new_status,
-                },
-            )
+        await write_audit_log(
+            self.session,
+            confirmed_by,
+            AuditAction.CREATE,
+            "payments",
+            payment.id,
+            after={
+                "deal_id": str(data.deal_id),
+                "amount": data.amount,
+                "method": data.method,
+                "new_deal_paid": new_paid,
+                "new_deal_status": new_status,
+            },
+        )
 
         logger.info(
             "payment.created",
             payment_id=str(payment.id),
             deal_id=str(data.deal_id),
             amount=data.amount,
-            new_status=deal.payment_status,
+            new_status=new_status,
         )
         return payment
 
@@ -85,24 +88,23 @@ class PaymentService:
         if payment.status == PaymentTxStatus.CONFIRMED:
             return payment  # Idempotent
 
-        async with self.session.begin():
-            payment.status = PaymentTxStatus.CONFIRMED
-            payment.paid_at = datetime.now(timezone.utc)
+        payment.status = PaymentTxStatus.CONFIRMED
+        payment.paid_at = datetime.now(timezone.utc)
 
-            new_paid, new_status = await self._recalc_deal_payment_aggregates(payment.deal_id)
-            await write_audit_log(
-                self.session,
-                None,
-                AuditAction.UPDATE,
-                "payments",
-                payment.id,
-                after={
-                    "external_id": external_id,
-                    "status": PaymentTxStatus.CONFIRMED.value,
-                    "new_deal_paid": new_paid,
-                    "new_deal_status": new_status,
-                },
-            )
+        new_paid, new_status = await self._recalc_deal_payment_aggregates(payment.deal_id)
+        await write_audit_log(
+            self.session,
+            None,
+            AuditAction.UPDATE,
+            "payments",
+            payment.id,
+            after={
+                "external_id": external_id,
+                "status": PaymentTxStatus.CONFIRMED.value,
+                "new_deal_paid": new_paid,
+                "new_deal_status": new_status,
+            },
+        )
 
         logger.info("payment.confirmed_online", external_id=external_id)
         return payment
@@ -112,18 +114,21 @@ class PaymentService:
         if payment.status != PaymentTxStatus.CONFIRMED:
             raise ValidationError("Only confirmed payments can be refunded")
 
-        async with self.session.begin():
-            payment.status = PaymentTxStatus.REFUNDED
-            new_paid, new_status = await self._recalc_deal_payment_aggregates(payment.deal_id)
+        payment.status = PaymentTxStatus.REFUNDED
+        new_paid, new_status = await self._recalc_deal_payment_aggregates(payment.deal_id)
 
-            await write_audit_log(
-                self.session, refunded_by, AuditAction.UPDATE, "payments", payment_id,
-                after={
-                    "status": PaymentTxStatus.REFUNDED.value,
-                    "new_deal_paid": new_paid,
-                    "new_deal_status": new_status,
-                },
-            )
+        await write_audit_log(
+            self.session,
+            refunded_by,
+            AuditAction.UPDATE,
+            "payments",
+            payment_id,
+            after={
+                "status": PaymentTxStatus.REFUNDED.value,
+                "new_deal_paid": new_paid,
+                "new_deal_status": new_status,
+            },
+        )
 
         logger.info("payment.refunded", payment_id=str(payment_id))
         return payment

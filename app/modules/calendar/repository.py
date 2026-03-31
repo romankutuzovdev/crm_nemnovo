@@ -273,9 +273,14 @@ class CalendarRepository:
                 rafting_stmt = rafting_stmt.where(False)
 
             rafting_result = await self.session.execute(rafting_stmt)
+            from app.modules.rafting.schedule import trip_window
+
             for trip, deal, client, route in rafting_result.all():
-                event_start = datetime.combine(trip.trip_date, time(9, 0))
-                event_end = datetime.combine(trip.trip_date, time(12, 0))
+                event_start, event_end = trip_window(
+                    trip_date=trip.trip_date,
+                    trip_start_time=trip.trip_start_time,
+                    route=route,
+                )
                 client_name = ""
                 if client:
                     client_name = f"{client.first_name} {client.last_name}"
@@ -335,7 +340,36 @@ class CalendarRepository:
             if client_row:
                 client_name = f"{client_row.first_name} {client_row.last_name}".strip() or None
             title = f"Заявка: {st}"
-            if client_name:
+
+            # "Сборный": если заявка создана из формы мероприятия и содержит несколько участников.
+            # Участники лежат в raw_payload.participants (см. create_calendar_multi_event).
+            participants = []
+            if isinstance(getattr(lead, "raw_payload", None), dict):
+                participants = lead.raw_payload.get("participants") or []
+            if isinstance(participants, list) and len(participants) > 1:
+                names: list[str] = []
+                for p in participants:
+                    if not isinstance(p, dict):
+                        continue
+                    nc = p.get("new_client")
+                    if isinstance(nc, dict):
+                        first = str(nc.get("first_name") or "").strip()
+                        last = str(nc.get("last_name") or "").strip()
+                        nm = f"{first} {last}".strip()
+                        if nm:
+                            names.append(nm)
+                    cid = p.get("client_id")
+                    if cid and client_row:
+                        # если в заявке есть основной client_id, добавим его ФИО (остальные могут быть не в join)
+                        nm = f"{client_row.first_name} {client_row.last_name}".strip()
+                        if nm:
+                            names.append(nm)
+                shown = ", ".join([n for n in names if n][:2])
+                more = max(0, len(participants) - 2)
+                title = f"{title} — Сборный"
+                if shown:
+                    title = f"{title}: {shown}{f' +{more}' if more else ''}"
+            elif client_name:
                 title = f"{title} — {client_name}"
             events.append({
                 "id": f"lead:{lead.id}",

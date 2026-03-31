@@ -206,6 +206,16 @@ async def list_trips(
     )
 
 
+@router.get("/trips/{trip_id}", response_model=RaftingTripResponse)
+async def get_trip(
+    trip_id: UUID,
+    current_user=require_permission("orders", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    repo = RaftingTripRepository(db)
+    return await repo.get_or_raise(trip_id)
+
+
 @router.post("/trips", response_model=RaftingTripResponse, status_code=201)
 async def create_trip(
     data: RaftingTripCreate,

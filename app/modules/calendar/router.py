@@ -118,7 +118,7 @@ async def move_deal_bookings(
     if not active:
         raise NotFoundError("Нет активных бронирований для переноса")
     old_start = min(b.start_datetime for b in active)
-    new_start = datetime.fromisoformat(data.start.replace("Z", "+00:00"))
+    new_start = datetime.fromisoformat(data.start.replace("Z", "+00:00")).replace(tzinfo=None)
     delta = new_start - old_start
     asset_repo = AssetRepository(db)
     for b in active:
@@ -130,6 +130,137 @@ async def move_deal_bookings(
     for b in active:
         b.start_datetime = b.start_datetime + delta
         b.end_datetime = b.end_datetime + delta
+    return {"ok": True}
+
+
+@router.patch("/events/lead/{lead_id}")
+async def move_lead_event(
+    lead_id: UUID,
+    data: BookingMoveRequest,
+    current_user=require_permission("leads", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Перемещение заявки (lead) простым переносом даты в календаре."""
+    from datetime import datetime
+
+    from sqlalchemy import select
+
+    from app.core.exceptions import NotFoundError
+    from app.modules.leads.models import Lead
+
+    result = await db.execute(select(Lead).where(Lead.id == lead_id))
+    lead = result.scalar_one_or_none()
+    if not lead:
+        # Если заявки нет (рассинхрон данных), просто тихо выходим без ошибки,
+        # чтобы drag-and-drop не ломал UX.
+        return {"ok": False}
+
+    start_dt = datetime.fromisoformat(data.start.replace("Z", "+00:00"))
+    # Меняем только предпочитаемую дату (логика слота в календаре — день)
+    lead.preferred_date = start_dt.date()
+    return {"ok": True}
+
+
+@router.patch("/events/hostel/{booking_id}")
+async def move_hostel_booking(
+    booking_id: UUID,
+    data: BookingMoveRequest,
+    current_user=require_permission("bookings", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Перемещение хостел-бронирования (drag-drop) — сдвиг check_in/check_out по дням."""
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+    from app.modules.hostel.models import HostelBooking
+    from app.modules.hostel.repository import HostelBookingRepository
+
+    row = await db.execute(select(HostelBooking).where(HostelBooking.id == booking_id))
+    hb = row.scalar_one_or_none()
+    if not hb:
+        raise NotFoundError("Бронирование хостела не найдено")
+
+    start_dt = datetime.fromisoformat(data.start.replace("Z", "+00:00"))
+    new_check_in = start_dt.date()
+    nights = (hb.check_out - hb.check_in).days
+    if nights < 1:
+        raise ValidationError("Некорректные даты бронирования")
+    new_check_out = new_check_in + timedelta(days=nights)
+
+    repo = HostelBookingRepository(db)
+    if await repo.has_overlap(hb.room_id, new_check_in, new_check_out, exclude_booking_id=hb.id):
+        raise ConflictError("Номер занят на выбранные даты")
+
+    hb.check_in = new_check_in
+    hb.check_out = new_check_out
+    return {"ok": True}
+
+
+@router.patch("/events/rent/{order_id}")
+async def move_rent_order(
+    order_id: UUID,
+    data: BookingMoveRequest,
+    current_user=require_permission("bookings", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Перемещение аренды (drag-drop) — меняем service_date по дате start."""
+    from datetime import datetime
+
+    from sqlalchemy import select
+
+    from app.core.exceptions import NotFoundError
+    from app.modules.rent.models import RentOrder
+
+    row = await db.execute(select(RentOrder).where(RentOrder.id == order_id))
+    ro = row.scalar_one_or_none()
+    if not ro:
+        raise NotFoundError("Аренда не найдена")
+
+    start_dt = datetime.fromisoformat(data.start.replace("Z", "+00:00"))
+    ro.service_date = start_dt.date()
+    return {"ok": True}
+
+
+@router.patch("/events/rafting/{trip_id}")
+async def move_rafting_trip(
+    trip_id: UUID,
+    data: BookingMoveRequest,
+    current_user=require_permission("orders", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Перемещение сплава (drag-drop) — меняем дату/время начала с проверкой занятости."""
+    from datetime import datetime
+
+    from sqlalchemy import select
+
+    from app.core.exceptions import NotFoundError
+    from app.modules.rafting.models import RaftingTrip
+    from app.modules.rafting.schedule import ensure_rafting_schedule_free
+
+    row = await db.execute(select(RaftingTrip).where(RaftingTrip.id == trip_id))
+    trip = row.scalar_one_or_none()
+    if not trip:
+        raise NotFoundError("Сплав не найден")
+
+    start_dt = datetime.fromisoformat(data.start.replace("Z", "+00:00"))
+    new_date = start_dt.date()
+    # DB хранит naive time (без tzinfo), поэтому приводим к naive.
+    new_time = start_dt.time().replace(microsecond=0, tzinfo=None)
+
+    await ensure_rafting_schedule_free(
+        db,
+        trip_date=new_date,
+        trip_start_time=new_time,
+        route_id=trip.route_id,
+        instructor_id=trip.instructor_id,
+        vehicle_id=trip.vehicle_id,
+        exclude_trip_id=trip.id,
+    )
+
+    trip.trip_date = new_date
+    trip.trip_start_time = new_time
     return {"ok": True}
 
 

@@ -62,6 +62,7 @@ interface ParticipantLineForm {
   description: string;
   quantity: number;
   unit_price: number;
+  total_price: number;
 }
 
 interface SlotLineForm {
@@ -141,6 +142,97 @@ interface LeadDetail {
   guests_count: number;
 }
 
+interface RaftingTripDetail {
+  id: string;
+  deal_id: string | null;
+  route_id: string;
+  instructor_id: string | null;
+  vehicle_id: string | null;
+  trip_date: string; // YYYY-MM-DD
+  trip_start_time: string | null; // HH:MM:SS
+  trip_price: number | null;
+  guests_count: number;
+  status: string;
+  notes: string | null;
+  price_per_person?: number | null;
+}
+
+interface RaftingRouteRow {
+  id: string;
+  name: string;
+  duration_hours: number | null;
+  default_price_per_person: number | null;
+  is_active: boolean;
+}
+
+interface RaftingInstructorRow {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  is_active: boolean;
+}
+
+interface TransportVehicleRow {
+  id: string;
+  name: string;
+  plate_number: string | null;
+  seats: number | null;
+  is_active: boolean;
+}
+
+interface HostelGuestRow {
+  id: string;
+  booking_id: string;
+  full_name: string;
+  phone: string | null;
+  id_document: string | null;
+}
+
+interface HostelBookingDetail {
+  id: string;
+  room_id: string;
+  deal_id: string | null;
+  check_in: string; // YYYY-MM-DD
+  check_out: string; // YYYY-MM-DD
+  guests_count: number;
+  price_per_person_per_night: number | null;
+  total_amount: number;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  guests: HostelGuestRow[];
+  nights?: number;
+}
+
+interface RentOrderLineRow {
+  id?: string;
+  order_id?: string;
+  catalog_item_id: string | null;
+  title: string;
+  quantity: number;
+  unit_price: number;
+  line_total?: number;
+}
+
+interface RentOrderDetail {
+  id: string;
+  service_date: string; // YYYY-MM-DD
+  deal_id: string | null;
+  status: string;
+  total_amount: number;
+  notes: string | null;
+  created_at: string;
+  lines: Array<{
+    id: string;
+    order_id: string;
+    catalog_item_id: string | null;
+    title: string;
+    quantity: number;
+    unit_price: number;
+    line_total: number;
+  }>;
+}
+
 const SERVICE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "Все услуги" },
   { value: "rafting", label: "Сплав" },
@@ -217,6 +309,56 @@ export default function Calendar() {
   const [leadPreferredDate, setLeadPreferredDate] = useState("");
   const [leadServiceType, setLeadServiceType] = useState("");
   const [leadGuestsCount, setLeadGuestsCount] = useState(1);
+  const [raftingTrip, setRaftingTrip] = useState<RaftingTripDetail | null>(null);
+  const [raftingLoading, setRaftingLoading] = useState(false);
+  const [raftingRoutes, setRaftingRoutes] = useState<RaftingRouteRow[]>([]);
+  const [raftingInstructors, setRaftingInstructors] = useState<RaftingInstructorRow[]>([]);
+  const [raftingVehicles, setRaftingVehicles] = useState<TransportVehicleRow[]>([]);
+  const [raftingForm, setRaftingForm] = useState<{
+    route_id: string;
+    trip_date: string;
+    trip_start_time: string;
+    guests_count: string;
+    trip_price: string;
+    instructor_id: string;
+    vehicle_id: string;
+    notes: string;
+  }>({
+    route_id: "",
+    trip_date: "",
+    trip_start_time: "",
+    guests_count: "1",
+    trip_price: "",
+    instructor_id: "",
+    vehicle_id: "",
+    notes: "",
+  });
+  const [hostelBooking, setHostelBooking] = useState<HostelBookingDetail | null>(null);
+  const [hostelLoading, setHostelLoading] = useState(false);
+  const [hostelRooms, setHostelRooms] = useState<HostelRoom[]>([]);
+  const [hostelForm, setHostelForm] = useState<{
+    room_id: string;
+    check_in: string;
+    check_out: string;
+    guests_count: string;
+    price_per_person_per_night: string;
+    notes: string;
+  }>({
+    room_id: "",
+    check_in: "",
+    check_out: "",
+    guests_count: "1",
+    price_per_person_per_night: "",
+    notes: "",
+  });
+  const [rentOrder, setRentOrder] = useState<RentOrderDetail | null>(null);
+  const [rentLoading, setRentLoading] = useState(false);
+  const [rentCatalog, setRentCatalog] = useState<RentCatalogItem[]>([]);
+  const [rentForm, setRentForm] = useState<{
+    service_date: string;
+    notes: string;
+    lines: RentOrderLineRow[];
+  }>({ service_date: "", notes: "", lines: [] });
   const [orderLoading, setOrderLoading] = useState(false);
   const [leadLoading, setLeadLoading] = useState(false);
   const [detailSaving, setDetailSaving] = useState(false);
@@ -244,6 +386,7 @@ export default function Calendar() {
         description: "Услуга",
         quantity: 1,
         unit_price: 0,
+        total_price: 0,
       },
     ]);
     setSlotLines([{ asset_id: "", start_datetime: startIso, end_datetime: endIso, quantity: 1 }]);
@@ -325,7 +468,13 @@ export default function Calendar() {
       data.map((e) => {
         const idStr = String(e.id);
         const evType = String(e.event_type ?? "");
-        const startEditable = evType === "deal" || idStr.startsWith("booking:");
+        const startEditable =
+          evType === "deal" ||
+          evType === "lead" ||
+          evType === "rafting" ||
+          evType === "hostel" ||
+          evType === "rent" ||
+          idStr.startsWith("booking:");
         const durationEditable = idStr.startsWith("booking:");
         return {
           id: idStr,
@@ -440,6 +589,294 @@ export default function Calendar() {
       cancelled = true;
     };
   }, [selectedEvent?.lead_id, getToken]);
+
+  useEffect(() => {
+    if (!selectedEvent?.calendarId?.startsWith("rafting:")) {
+      setRaftingTrip(null);
+      setRaftingLoading(false);
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    let cancelled = false;
+    const tripId = selectedEvent.calendarId.replace("rafting:", "");
+    setRaftingLoading(true);
+    setDetailError(null);
+    (async () => {
+      try {
+        const [trip, routes, instructors, vehicles] = await Promise.all([
+          apiFetch<RaftingTripDetail>(`/rafting/trips/${tripId}`, { token }),
+          apiFetch<RaftingRouteRow[]>("/rafting/routes?limit=200", { token }),
+          apiFetch<RaftingInstructorRow[]>("/rafting/instructors?limit=200", { token }),
+          apiFetch<TransportVehicleRow[]>("/rafting/transport?limit=200", { token }),
+        ]);
+        if (cancelled) return;
+        setRaftingTrip(trip);
+        setRaftingRoutes(routes ?? []);
+        setRaftingInstructors(instructors ?? []);
+        setRaftingVehicles(vehicles ?? []);
+        setRaftingForm({
+          route_id: trip.route_id ?? "",
+          trip_date: (trip.trip_date ?? "").slice(0, 10),
+          trip_start_time: trip.trip_start_time ? trip.trip_start_time.slice(0, 5) : "",
+          guests_count: String(trip.guests_count ?? 1),
+          trip_price: trip.trip_price != null ? String(trip.trip_price) : "",
+          instructor_id: trip.instructor_id ?? "",
+          vehicle_id: trip.vehicle_id ?? "",
+          notes: trip.notes ?? "",
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setRaftingTrip(null);
+          setDetailError(err instanceof Error ? err.message : "Не удалось загрузить сплав");
+        }
+      } finally {
+        if (!cancelled) setRaftingLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent?.calendarId, getToken]);
+
+  useEffect(() => {
+    if (!selectedEvent?.calendarId?.startsWith("hostel:")) {
+      setHostelBooking(null);
+      setHostelLoading(false);
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    let cancelled = false;
+    const bookingId = selectedEvent.calendarId.replace("hostel:", "");
+    setHostelLoading(true);
+    setDetailError(null);
+    (async () => {
+      try {
+        const [b, rooms] = await Promise.all([
+          apiFetch<HostelBookingDetail>(`/hostel/bookings/${bookingId}`, { token }),
+          apiFetch<HostelRoom[]>("/hostel/rooms?limit=200", { token }),
+        ]);
+        if (cancelled) return;
+        setHostelBooking(b);
+        setHostelRooms(rooms ?? []);
+        setHostelForm({
+          room_id: b.room_id ?? "",
+          check_in: (b.check_in ?? "").slice(0, 10),
+          check_out: (b.check_out ?? "").slice(0, 10),
+          guests_count: String(b.guests_count ?? 1),
+          price_per_person_per_night:
+            b.price_per_person_per_night != null ? String(b.price_per_person_per_night) : "",
+          notes: b.notes ?? "",
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setHostelBooking(null);
+          setDetailError(err instanceof Error ? err.message : "Не удалось загрузить бронь хостела");
+        }
+      } finally {
+        if (!cancelled) setHostelLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent?.calendarId, getToken]);
+
+  useEffect(() => {
+    if (!selectedEvent?.calendarId?.startsWith("rent:")) {
+      setRentOrder(null);
+      setRentLoading(false);
+      return;
+    }
+    const token = getToken();
+    if (!token) return;
+    let cancelled = false;
+    const orderId = selectedEvent.calendarId.replace("rent:", "");
+    setRentLoading(true);
+    setDetailError(null);
+    (async () => {
+      try {
+        const [o, catalog] = await Promise.all([
+          apiFetch<RentOrderDetail>(`/rent/orders/${orderId}`, { token }),
+          apiFetch<RentCatalogItem[]>("/rent/catalog?limit=200", { token }),
+        ]);
+        if (cancelled) return;
+        setRentOrder(o);
+        setRentCatalog(catalog ?? []);
+        setRentForm({
+          service_date: (o.service_date ?? "").slice(0, 10),
+          notes: o.notes ?? "",
+          lines: (o.lines ?? []).map((l) => ({
+            id: l.id,
+            order_id: l.order_id,
+            catalog_item_id: l.catalog_item_id,
+            title: l.title,
+            quantity: l.quantity,
+            unit_price: Number(l.unit_price),
+            line_total: Number(l.line_total),
+          })),
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setRentOrder(null);
+          setDetailError(err instanceof Error ? err.message : "Не удалось загрузить аренду");
+        }
+      } finally {
+        if (!cancelled) setRentLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent?.calendarId, getToken]);
+
+  const saveRaftingEdits = async () => {
+    if (!selectedEvent?.calendarId?.startsWith("rafting:")) return;
+    const token = getToken();
+    if (!token) return;
+    const tripId = selectedEvent.calendarId.replace("rafting:", "");
+    if (!raftingForm.route_id.trim() || !raftingForm.trip_date.trim()) {
+      setDetailError("Выберите маршрут и дату сплава.");
+      return;
+    }
+    setDetailSaving(true);
+    setDetailError(null);
+    try {
+      const guests = Math.max(1, parseInt(raftingForm.guests_count, 10) || 1);
+      const body: Record<string, unknown> = {
+        route_id: raftingForm.route_id,
+        trip_date: raftingForm.trip_date,
+        guests_count: guests,
+        notes: raftingForm.notes.trim() ? raftingForm.notes.trim() : null,
+        instructor_id: raftingForm.instructor_id.trim() ? raftingForm.instructor_id.trim() : null,
+        vehicle_id: raftingForm.vehicle_id.trim() ? raftingForm.vehicle_id.trim() : null,
+      };
+      if (raftingForm.trip_start_time.trim()) {
+        body.trip_start_time = `${raftingForm.trip_start_time.trim()}:00`;
+      } else {
+        body.trip_start_time = null;
+      }
+      if (raftingForm.trip_price.trim()) {
+        const p = Number(raftingForm.trip_price.replace(",", "."));
+        if (!Number.isFinite(p) || p < 0) {
+          setDetailError("Цена должна быть числом >= 0");
+          return;
+        }
+        body.trip_price = p;
+      } else {
+        body.trip_price = null;
+      }
+
+      await apiFetch(`/rafting/trips/${tripId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify(body),
+      });
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      closeEventModal();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Ошибка сохранения сплава");
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
+  const saveHostelEdits = async () => {
+    if (!selectedEvent?.calendarId?.startsWith("hostel:")) return;
+    const token = getToken();
+    if (!token) return;
+    const bookingId = selectedEvent.calendarId.replace("hostel:", "");
+    if (!hostelForm.room_id.trim() || !hostelForm.check_in.trim() || !hostelForm.check_out.trim()) {
+      setDetailError("Выберите номер и даты заезда/выезда.");
+      return;
+    }
+    if (hostelForm.check_out <= hostelForm.check_in) {
+      setDetailError("Дата выезда должна быть позже заезда.");
+      return;
+    }
+    const guests = Math.max(1, parseInt(hostelForm.guests_count, 10) || 1);
+    const price = Number((hostelForm.price_per_person_per_night || "0").replace(",", "."));
+    if (!Number.isFinite(price) || price < 0) {
+      setDetailError("Цена за человека/ночь должна быть числом >= 0");
+      return;
+    }
+    setDetailSaving(true);
+    setDetailError(null);
+    try {
+      await apiFetch(`/hostel/bookings/${bookingId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          room_id: hostelForm.room_id,
+          check_in: hostelForm.check_in,
+          check_out: hostelForm.check_out,
+          guests_count: guests,
+          price_per_person_per_night: price,
+          notes: hostelForm.notes.trim() ? hostelForm.notes.trim() : null,
+        }),
+      });
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      closeEventModal();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Ошибка сохранения хостела");
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
+  const saveRentEdits = async () => {
+    if (!selectedEvent?.calendarId?.startsWith("rent:")) return;
+    const token = getToken();
+    if (!token) return;
+    const orderId = selectedEvent.calendarId.replace("rent:", "");
+    if (!rentForm.service_date.trim()) {
+      setDetailError("Укажите дату услуги аренды.");
+      return;
+    }
+    if (!rentForm.lines.length) {
+      setDetailError("Добавьте хотя бы одну позицию.");
+      return;
+    }
+    for (const ln of rentForm.lines) {
+      if (!ln.title.trim()) {
+        setDetailError("У каждой позиции должно быть название.");
+        return;
+      }
+      if (!Number.isFinite(ln.quantity) || ln.quantity < 1) {
+        setDetailError("Количество в позиции должно быть >= 1.");
+        return;
+      }
+      if (!Number.isFinite(ln.unit_price) || ln.unit_price < 0) {
+        setDetailError("Цена в позиции должна быть >= 0.");
+        return;
+      }
+    }
+    setDetailSaving(true);
+    setDetailError(null);
+    try {
+      await apiFetch(`/rent/orders/${orderId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          service_date: rentForm.service_date,
+          notes: rentForm.notes.trim() ? rentForm.notes.trim() : null,
+          lines: rentForm.lines.map((ln) => ({
+            catalog_item_id: ln.catalog_item_id || null,
+            title: ln.title.trim(),
+            quantity: Math.max(1, Math.trunc(ln.quantity)),
+            unit_price: Number(ln.unit_price),
+          })),
+        }),
+      });
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      closeEventModal();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Ошибка сохранения аренды");
+    } finally {
+      setDetailSaving(false);
+    }
+  };
 
   const closeEventModal = () => {
     setSelectedEvent(null);
@@ -577,7 +1014,14 @@ export default function Calendar() {
       info.revert();
       return;
     }
-    if (!id.startsWith("deal:") && !id.startsWith("booking:")) {
+    if (
+      !id.startsWith("deal:") &&
+      !id.startsWith("booking:") &&
+      !id.startsWith("lead:") &&
+      !id.startsWith("rafting:") &&
+      !id.startsWith("hostel:") &&
+      !id.startsWith("rent:")
+    ) {
       info.revert();
       return;
     }
@@ -589,9 +1033,37 @@ export default function Calendar() {
           token: getToken() ?? undefined,
           body: JSON.stringify({ start, end }),
         });
-      } else {
+      } else if (id.startsWith("booking:")) {
         const bookingId = id.replace("booking:", "");
         await apiFetch(`/calendar/events/booking/${bookingId}`, {
+          method: "PATCH",
+          token: getToken() ?? undefined,
+          body: JSON.stringify({ start, end }),
+        });
+      } else if (id.startsWith("lead:")) {
+        const leadId = id.replace("lead:", "");
+        await apiFetch(`/calendar/events/lead/${leadId}`, {
+          method: "PATCH",
+          token: getToken() ?? undefined,
+          body: JSON.stringify({ start, end }),
+        });
+      } else if (id.startsWith("rafting:")) {
+        const tripId = id.replace("rafting:", "");
+        await apiFetch(`/calendar/events/rafting/${tripId}`, {
+          method: "PATCH",
+          token: getToken() ?? undefined,
+          body: JSON.stringify({ start, end }),
+        });
+      } else if (id.startsWith("hostel:")) {
+        const hostelId = id.replace("hostel:", "");
+        await apiFetch(`/calendar/events/hostel/${hostelId}`, {
+          method: "PATCH",
+          token: getToken() ?? undefined,
+          body: JSON.stringify({ start, end }),
+        });
+      } else {
+        const rentId = id.replace("rent:", "");
+        await apiFetch(`/calendar/events/rent/${rentId}`, {
           method: "PATCH",
           token: getToken() ?? undefined,
           body: JSON.stringify({ start, end }),
@@ -995,6 +1467,7 @@ export default function Calendar() {
                           description: "Услуга",
                           quantity: 1,
                           unit_price: 0,
+                          total_price: 0,
                         },
                       ])
                     }
@@ -1130,6 +1603,8 @@ export default function Calendar() {
                                     catalog_item_id: first?.id ?? "",
                                     description: first?.description ?? row.description,
                                     unit_price: first?.unit_price ?? row.unit_price,
+                                    total_price:
+                                      Number(row.quantity ?? 1) * Number(first?.unit_price ?? row.unit_price ?? 0),
                                   }
                                 : row
                             );
@@ -1157,6 +1632,8 @@ export default function Calendar() {
                                 catalog_item_id: selectedId,
                                 description: selected?.description ?? row.description,
                                 unit_price: selected?.unit_price ?? row.unit_price,
+                                total_price:
+                                  Number(row.quantity ?? 1) * Number(selected?.unit_price ?? row.unit_price ?? 0),
                               };
                             });
                           })
@@ -1179,35 +1656,92 @@ export default function Calendar() {
                             prev.map((row, i) => (i === idx ? { ...row, description: e.target.value } : row))
                           )
                         }
-                        className="col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        className="col-span-12 sm:col-span-5 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                       />
-                      <input
-                        type="number"
-                        min={1}
-                        value={line.quantity}
-                        onChange={(e) =>
-                          setParticipantLines((prev) =>
-                            prev.map((row, i) =>
-                              i === idx ? { ...row, quantity: Number(e.target.value || 1) } : row
-                            )
-                          )
-                        }
-                        className="col-span-6 sm:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={line.unit_price}
-                        onChange={(e) =>
-                          setParticipantLines((prev) =>
-                            prev.map((row, i) =>
-                              i === idx ? { ...row, unit_price: Number(e.target.value || 0) } : row
-                            )
-                          )
-                        }
-                        className="col-span-6 sm:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                      />
+                    </div>
+
+                    <div className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-12 sm:col-span-4 md:col-span-3">
+                        <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
+                          Кол-во человек
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={line.quantity}
+                          onChange={(e) => {
+                            const q = Math.max(1, Number(e.target.value || 1));
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) =>
+                                i === idx
+                                  ? {
+                                      ...row,
+                                      quantity: q,
+                                      total_price: q * Number(row.unit_price ?? 0),
+                                    }
+                                  : row
+                              )
+                            );
+                          }}
+                          className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+                      <div className="col-span-12 sm:col-span-4 md:col-span-3">
+                        <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
+                          Цена за человека, ₽
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.unit_price}
+                          onChange={(e) => {
+                            const p = Number(e.target.value || 0);
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) =>
+                                i === idx
+                                  ? {
+                                      ...row,
+                                      unit_price: p,
+                                      total_price: Number(row.quantity ?? 1) * p,
+                                    }
+                                  : row
+                              )
+                            );
+                          }}
+                          className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+                      <div className="col-span-12 sm:col-span-4 md:col-span-3">
+                        <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
+                          Общая цена, ₽
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.total_price}
+                          onChange={(e) => {
+                            const total = Number(e.target.value || 0);
+                            setParticipantLines((prev) =>
+                              prev.map((row, i) => {
+                                if (i !== idx) return row;
+                                const q = Math.max(1, Number(row.quantity ?? 1));
+                                const nextUnit = q > 0 ? Math.round((total / q) * 100) / 100 : 0;
+                                return {
+                                  ...row,
+                                  total_price: total,
+                                  unit_price: nextUnit,
+                                };
+                              })
+                            );
+                          }}
+                          className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        />
+                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          Изменение общей цены автоматически пересчитает цену за человека.
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() =>
@@ -1215,7 +1749,7 @@ export default function Calendar() {
                             prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
                           )
                         }
-                        className="col-span-12 sm:col-span-1 px-2 py-2 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300"
+                        className="col-span-12 md:col-span-3 px-4 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 whitespace-nowrap"
                       >
                         Удалить
                       </button>
@@ -1241,7 +1775,7 @@ export default function Calendar() {
                   </button>
                 </div>
                 {slotLines.map((line, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2">
+                  <div key={idx} className="grid grid-cols-12 gap-2 items-end">
                     <select
                       value={line.asset_id}
                       onChange={(e) =>
@@ -1250,7 +1784,7 @@ export default function Calendar() {
                         )
                       }
                       required
-                      className="col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      className="col-span-12 md:col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     >
                       <option value="">Актив</option>
                       {assets.map((a) => (
@@ -1267,7 +1801,7 @@ export default function Calendar() {
                           prev.map((row, i) => (i === idx ? { ...row, start_datetime: e.target.value } : row))
                         )
                       }
-                      className="col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      className="col-span-12 sm:col-span-6 md:col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     />
                     <input
                       type="datetime-local"
@@ -1277,7 +1811,7 @@ export default function Calendar() {
                           prev.map((row, i) => (i === idx ? { ...row, end_datetime: e.target.value } : row))
                         )
                       }
-                      className="col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      className="col-span-12 sm:col-span-6 md:col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     />
                     <input
                       type="number"
@@ -1288,7 +1822,7 @@ export default function Calendar() {
                           prev.map((row, i) => (i === idx ? { ...row, quantity: Number(e.target.value || 1) } : row))
                         )
                       }
-                      className="col-span-1 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      className="col-span-6 sm:col-span-3 md:col-span-1 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     />
                     <button
                       type="button"
@@ -1297,7 +1831,7 @@ export default function Calendar() {
                           prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
                         )
                       }
-                      className="col-span-12 md:col-span-1 px-2 py-2 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300"
+                      className="col-span-6 sm:col-span-3 md:col-span-2 px-4 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 whitespace-nowrap"
                     >
                       Удалить
                     </button>
@@ -1692,6 +2226,402 @@ export default function Calendar() {
                 >
                   Открыть заказ
                 </Link>
+              </div>
+            )}
+
+            {selectedEvent.event_type === "rafting" && (
+              <div className="space-y-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Сплав</h3>
+                {raftingLoading && <p className="text-xs text-slate-500">Загрузка сплава…</p>}
+                {raftingTrip && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Маршрут</label>
+                        <select
+                          value={raftingForm.route_id}
+                          onChange={(e) => setRaftingForm((p) => ({ ...p, route_id: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        >
+                          <option value="">Выберите…</option>
+                          {raftingRoutes
+                            .filter((r) => r.is_active)
+                            .map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Дата</label>
+                        <input
+                          type="date"
+                          value={raftingForm.trip_date}
+                          onChange={(e) => setRaftingForm((p) => ({ ...p, trip_date: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Старт (время)</label>
+                        <input
+                          type="time"
+                          value={raftingForm.trip_start_time}
+                          onChange={(e) => setRaftingForm((p) => ({ ...p, trip_start_time: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Людей</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={raftingForm.guests_count}
+                          onChange={(e) => setRaftingForm((p) => ({ ...p, guests_count: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Цена (общая)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={raftingForm.trip_price}
+                          onChange={(e) => setRaftingForm((p) => ({ ...p, trip_price: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Инструктор</label>
+                        <select
+                          value={raftingForm.instructor_id}
+                          onChange={(e) => setRaftingForm((p) => ({ ...p, instructor_id: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        >
+                          <option value="">—</option>
+                          {raftingInstructors
+                            .filter((i) => i.is_active)
+                            .map((i) => (
+                              <option key={i.id} value={i.id}>
+                                {i.full_name}
+                                {i.phone ? ` — ${i.phone}` : ""}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Транспорт</label>
+                        <select
+                          value={raftingForm.vehicle_id}
+                          onChange={(e) => setRaftingForm((p) => ({ ...p, vehicle_id: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        >
+                          <option value="">—</option>
+                          {raftingVehicles
+                            .filter((v) => v.is_active)
+                            .map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.name}
+                                {v.plate_number ? ` (${v.plate_number})` : ""}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Комментарий</label>
+                      <textarea
+                        rows={2}
+                        value={raftingForm.notes}
+                        onChange={(e) => setRaftingForm((p) => ({ ...p, notes: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={detailSaving || raftingLoading}
+                      onClick={() => void saveRaftingEdits()}
+                      className="w-full py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium disabled:opacity-50"
+                    >
+                      {detailSaving ? "Сохранение…" : "Сохранить сплав"}
+                    </button>
+                    <p className="text-xs text-slate-500">
+                      При сохранении проверяется занятость инструктора и транспорта по времени сплава.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedEvent.event_type === "hostel" && (
+              <div className="space-y-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Хостел</h3>
+                {hostelLoading && <p className="text-xs text-slate-500">Загрузка брони…</p>}
+                {hostelBooking && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Номер</label>
+                        <select
+                          value={hostelForm.room_id}
+                          onChange={(e) => setHostelForm((p) => ({ ...p, room_id: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        >
+                          <option value="">Выберите…</option>
+                          {hostelRooms.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.code}
+                              {r.title ? ` — ${r.title}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Проживающих</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={hostelForm.guests_count}
+                          onChange={(e) => setHostelForm((p) => ({ ...p, guests_count: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Заезд</label>
+                        <input
+                          type="date"
+                          value={hostelForm.check_in}
+                          onChange={(e) => setHostelForm((p) => ({ ...p, check_in: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Выезд</label>
+                        <input
+                          type="date"
+                          value={hostelForm.check_out}
+                          onChange={(e) => setHostelForm((p) => ({ ...p, check_out: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                          Цена / чел / ночь
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={hostelForm.price_per_person_per_night}
+                          onChange={(e) =>
+                            setHostelForm((p) => ({ ...p, price_per_person_per_night: e.target.value }))
+                          }
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 flex items-end">
+                        Итого сейчас: {Number(hostelBooking.total_amount ?? 0).toLocaleString("ru")} ₽
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Комментарий</label>
+                      <textarea
+                        rows={2}
+                        value={hostelForm.notes}
+                        onChange={(e) => setHostelForm((p) => ({ ...p, notes: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                      />
+                    </div>
+                    {hostelBooking.guests?.length > 0 && (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2">
+                        <div className="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                          Список гостей (ФИО / телефон)
+                        </div>
+                        <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                          {hostelBooking.guests.map((g) => (
+                            <li key={g.id}>
+                              {g.full_name}
+                              {g.phone ? ` — ${g.phone}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      disabled={detailSaving || hostelLoading}
+                      onClick={() => void saveHostelEdits()}
+                      className="w-full py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium disabled:opacity-50"
+                    >
+                      {detailSaving ? "Сохранение…" : "Сохранить хостел"}
+                    </button>
+                    <p className="text-xs text-slate-500">
+                      При сохранении проверяется пересечение по датам — если номер занят, будет ошибка.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedEvent.event_type === "rent" && (
+              <div className="space-y-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Аренда</h3>
+                {rentLoading && <p className="text-xs text-slate-500">Загрузка аренды…</p>}
+                {rentOrder && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Дата услуги</label>
+                        <input
+                          type="date"
+                          value={rentForm.service_date}
+                          onChange={(e) => setRentForm((p) => ({ ...p, service_date: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                        />
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 flex items-end">
+                        Итого: {Number(rentOrder.total_amount ?? 0).toLocaleString("ru")} ₽
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-600 dark:text-slate-400 mb-1">Комментарий</label>
+                      <textarea
+                        rows={2}
+                        value={rentForm.notes}
+                        onChange={(e) => setRentForm((p) => ({ ...p, notes: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-medium text-slate-600 dark:text-slate-300">Позиции</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRentForm((p) => ({
+                              ...p,
+                              lines: [
+                                ...p.lines,
+                                { catalog_item_id: null, title: "Позиция", quantity: 1, unit_price: 0 },
+                              ],
+                            }))
+                          }
+                          className="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded"
+                        >
+                          + Позиция
+                        </button>
+                      </div>
+                      {rentForm.lines.map((ln, idx) => (
+                        <div key={idx} className="grid grid-cols-12 gap-2">
+                          <select
+                            value={ln.catalog_item_id ?? ""}
+                            onChange={(e) => {
+                              const selectedId = e.target.value || null;
+                              const selected = rentCatalog.find((c) => c.id === selectedId);
+                              setRentForm((p) => ({
+                                ...p,
+                                lines: p.lines.map((x, i) =>
+                                  i === idx
+                                    ? {
+                                        ...x,
+                                        catalog_item_id: selectedId,
+                                        title: selected?.name ?? x.title,
+                                        unit_price:
+                                          selected?.default_unit_price != null
+                                            ? Number(selected.default_unit_price)
+                                            : x.unit_price,
+                                      }
+                                    : x
+                                ),
+                              }));
+                            }}
+                            className="col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                          >
+                            <option value="">Из каталога (необязательно)…</option>
+                            {rentCatalog
+                              .filter((c) => c.is_active)
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                          </select>
+                          <input
+                            value={ln.title}
+                            onChange={(e) =>
+                              setRentForm((p) => ({
+                                ...p,
+                                lines: p.lines.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)),
+                              }))
+                            }
+                            className="col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            value={ln.quantity}
+                            onChange={(e) => {
+                              const q = Number(e.target.value || 1);
+                              setRentForm((p) => ({
+                                ...p,
+                                lines: p.lines.map((x, i) => (i === idx ? { ...x, quantity: q } : x)),
+                              }));
+                            }}
+                            className="col-span-6 sm:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={ln.unit_price}
+                            onChange={(e) => {
+                              const pnum = Number(e.target.value || 0);
+                              setRentForm((p) => ({
+                                ...p,
+                                lines: p.lines.map((x, i) => (i === idx ? { ...x, unit_price: pnum } : x)),
+                              }));
+                            }}
+                            className="col-span-6 sm:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRentForm((p) => ({
+                                ...p,
+                                lines: p.lines.length === 1 ? p.lines : p.lines.filter((_, i) => i !== idx),
+                              }))
+                            }
+                            className="col-span-12 sm:col-span-2 md:col-span-1 px-3 py-2.5 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs sm:text-sm text-red-700 dark:text-red-300"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={detailSaving || rentLoading}
+                      onClick={() => void saveRentEdits()}
+                      className="w-full py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium disabled:opacity-50"
+                    >
+                      {detailSaving ? "Сохранение…" : "Сохранить аренду"}
+                    </button>
+                    <p className="text-xs text-slate-500">
+                      Сумма аренды пересчитывается по позициям (кол-во × цена).
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

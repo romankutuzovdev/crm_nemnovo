@@ -65,6 +65,14 @@ class CalendarMultiSlotLine(BaseSchema):
     end_datetime: datetime
     quantity: int = 1
 
+    @model_validator(mode="after")
+    def validate_slot_dates(self) -> "CalendarMultiSlotLine":
+        if self.end_datetime <= self.start_datetime:
+            raise ValueError("end_datetime должно быть позже start_datetime")
+        if self.quantity < 1:
+            raise ValueError("quantity должно быть >= 1")
+        return self
+
 
 class CalendarNewClientInline(BaseSchema):
     """Данные для создания карточки клиента из формы мероприятия."""
@@ -105,3 +113,13 @@ class CalendarEventMultiCreate(BaseSchema):
     contract_text: str | None = None
     participants: list[CalendarEventParticipantLine]
     slots: list[CalendarMultiSlotLine]
+
+    @model_validator(mode="after")
+    def validate_required(self) -> "CalendarEventMultiCreate":
+        if not self.participants:
+            raise ValueError("Нужно добавить хотя бы одного участника")
+        if not self.slots:
+            raise ValueError("Нужно добавить хотя бы один слот")
+        if self.guests_count < len(self.participants):
+            raise ValueError("guests_count не меньше количества участников")
+        return self

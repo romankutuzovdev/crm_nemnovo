@@ -9,7 +9,6 @@ from app.shared.enums import BookingStatus
 
 class RaftingRouteCreate(BaseSchema):
     name: str
-    difficulty: str | None = None
     duration_hours: int | None = None
     default_price_per_person: float | None = Field(default=None, ge=0)
     description: str | None = None
@@ -18,7 +17,6 @@ class RaftingRouteCreate(BaseSchema):
 
 class RaftingRouteUpdate(BaseSchema):
     name: str | None = None
-    difficulty: str | None = None
     duration_hours: int | None = None
     default_price_per_person: float | None = Field(default=None, ge=0)
     description: str | None = None
@@ -27,7 +25,6 @@ class RaftingRouteUpdate(BaseSchema):
 
 class RaftingRouteResponse(UUIDSchema):
     name: str
-    difficulty: str | None
     duration_hours: int | None
     default_price_per_person: float | None = None
     description: str | None

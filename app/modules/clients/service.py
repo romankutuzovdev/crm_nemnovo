@@ -65,25 +65,29 @@ class ClientService:
             raise ConflictError(f"Client with phone {data.phone} already exists")
         if data.email and await self.repo.find_by_email(data.email):
             raise ConflictError(f"Client with email {data.email} already exists")
-
-        async with self.session.begin():
-            client = await self.repo.create(**data.model_dump())
-            await write_audit_log(
-                self.session, created_by, AuditAction.CREATE, "clients", client.id,
-                after={"phone": client.phone, "email": client.email},
-            )
+        client = await self.repo.create(**data.model_dump())
+        await write_audit_log(
+            self.session,
+            created_by,
+            AuditAction.CREATE,
+            "clients",
+            client.id,
+            after={"phone": client.phone, "email": client.email},
+        )
         return client
 
     async def update_client(self, client_id: UUID, data: ClientUpdate, updated_by: UUID) -> Client:
         client = await self.repo.get_or_raise(client_id)
         update_data = data.model_dump(exclude_unset=True, mode="python")
-
-        async with self.session.begin():
-            client = await self.repo.update(client_id, **update_data)
-            await write_audit_log(
-                self.session, updated_by, AuditAction.UPDATE, "clients", client_id,
-                after=update_data,
-            )
+        client = await self.repo.update(client_id, **update_data)
+        await write_audit_log(
+            self.session,
+            updated_by,
+            AuditAction.UPDATE,
+            "clients",
+            client_id,
+            after=update_data,
+        )
         return client
 
     async def add_note(self, client_id: UUID, data: ClientNoteCreate, author_id: UUID) -> ClientNote:

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8888";
 const API_PREFIX = "/api/v1";
 const SITE_WEBHOOK_PATH = `${API_PREFIX}/webhooks/site`;
 const TELEPHONY_WEBHOOK_PATH = `${API_PREFIX}/webhooks/telephony`;

@@ -187,7 +187,7 @@ export default function ClientsPage() {
                 <label className="block text-sm text-slate-400 mb-1">Комментарий</label>
                 <textarea
                   rows={3}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-slate-600 text-black"
                   placeholder="Заметка к карточке…"
                   value={createForm.comment}
                   onChange={(e) => setCreateForm((s) => ({ ...s, comment: e.target.value }))}

@@ -23,17 +23,8 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_excursions_payer_company_id"), "excursions", ["payer_company_id"], unique=False
     )
-    op.create_foreign_key(
-        "fk_excursions_payer_company_id_companies",
-        "excursions",
-        "companies",
-        ["payer_company_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_excursions_payer_company_id_companies", "excursions", type_="foreignkey")
     op.drop_index(op.f("ix_excursions_payer_company_id"), table_name="excursions")
     op.drop_column("excursions", "payer_company_id")

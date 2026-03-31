@@ -25,6 +25,7 @@ from app.core.security import hash_password
 from app.db.base import Base
 from app.modules.clients.models import Client  # noqa: F401 — до assets, нужен для Deal.client
 from app.modules.assets.models import Asset, AssetCategory
+from app.modules.contracts.models import Contract  # noqa: F401 — для связки Deal.contract / Company.contracts
 from app.modules.users.models import User, Role
 
 

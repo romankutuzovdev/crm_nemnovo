@@ -3,6 +3,7 @@ import uuid
 
 import structlog
 from fastapi import Request, Response
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = structlog.get_logger()
@@ -24,6 +25,19 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         try:
             response = await call_next(request)
+        except RequestValidationError as exc:
+            # Логируем детали 422, иначе в терминале видно только status_code=422.
+            try:
+                body = await request.body()
+                body_text = body.decode("utf-8", errors="replace") if body else ""
+            except Exception:
+                body_text = ""
+            logger.warning(
+                "http.request_validation_error",
+                errors=exc.errors(),
+                body=body_text[:4000],
+            )
+            raise
         except Exception as exc:
             # Keep request context (request_id, method, path) for exception logs
             logger.exception(

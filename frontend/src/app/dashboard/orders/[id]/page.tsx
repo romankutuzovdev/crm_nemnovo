@@ -969,15 +969,26 @@ export default function OrderDetailsPage() {
 
           {showAddItem && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-              <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
-                <h3 className="text-lg font-semibold text-slate-100 mb-4">Новая услуга</h3>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Новая услуга</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddItem(false)}
+                    className="shrink-0 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                    aria-label="Закрыть"
+                    title="Закрыть"
+                  >
+                    ✕
+                  </button>
+                </div>
                 <div className="space-y-3 text-sm">
                   <div>
-                    <label className="block text-slate-400 mb-1">Клиент</label>
+                    <label className="block text-slate-700 dark:text-slate-400 mb-1">Клиент</label>
                     <select
                       value={newItemClientId}
                       onChange={(e) => setNewItemClientId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                     >
                       <option value="">Не привязан (общий заказ)</option>
                       {clientChoices.map((c) => (
@@ -988,45 +999,45 @@ export default function OrderDetailsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1">Тип</label>
+                    <label className="block text-slate-700 dark:text-slate-400 mb-1">Тип</label>
                     <select
                       value={newItemKind}
                       onChange={(e) => setNewItemKind(e.target.value as "primary" | "addon")}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                     >
                       <option value="primary">Основная услуга</option>
                       <option value="addon">Дополнительная услуга</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1">Описание</label>
+                    <label className="block text-slate-700 dark:text-slate-400 mb-1">Описание</label>
                     <input
                       value={newItemDesc}
                       onChange={(e) => setNewItemDesc(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                       placeholder="Например: инвентарь, трансфер…"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-slate-400 mb-1">Кол-во</label>
+                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Кол-во</label>
                       <input
                         type="number"
                         min={1}
                         value={newItemQty}
                         onChange={(e) => setNewItemQty(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-400 mb-1">Цена за ед., ₽</label>
+                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Цена за ед., ₽</label>
                       <input
                         type="number"
                         min={0}
                         step="0.01"
                         value={newItemPrice}
                         onChange={(e) => setNewItemPrice(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                       />
                     </div>
                   </div>
@@ -1048,7 +1059,7 @@ export default function OrderDetailsPage() {
                   <button
                     type="button"
                     onClick={() => setShowAddItem(false)}
-                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
+                    className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-900 dark:text-white"
                   >
                     Отмена
                   </button>
@@ -1059,48 +1070,59 @@ export default function OrderDetailsPage() {
 
           {editItem && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-              <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
-                <h3 className="text-lg font-semibold text-slate-100 mb-4">Правка услуги</h3>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Правка услуги</h3>
+                  <button
+                    type="button"
+                    onClick={() => setEditItem(null)}
+                    className="shrink-0 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                    aria-label="Закрыть"
+                    title="Закрыть"
+                  >
+                    ✕
+                  </button>
+                </div>
                 <div className="space-y-3 text-sm">
                   <div>
-                    <label className="block text-slate-400 mb-1">Тип</label>
+                    <label className="block text-slate-700 dark:text-slate-400 mb-1">Тип</label>
                     <select
                       value={editItemKind}
                       onChange={(e) => setEditItemKind(e.target.value as "primary" | "addon")}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                     >
                       <option value="primary">Основная услуга</option>
                       <option value="addon">Дополнительная услуга</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-1">Описание</label>
+                    <label className="block text-slate-700 dark:text-slate-400 mb-1">Описание</label>
                     <input
                       value={editItemDesc}
                       onChange={(e) => setEditItemDesc(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-slate-400 mb-1">Кол-во</label>
+                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Кол-во</label>
                       <input
                         type="number"
                         min={1}
                         value={editItemQty}
                         onChange={(e) => setEditItemQty(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-400 mb-1">Цена за ед., ₽</label>
+                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Цена за ед., ₽</label>
                       <input
                         type="number"
                         min={0}
                         step="0.01"
                         value={editItemPrice}
                         onChange={(e) => setEditItemPrice(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-600 text-slate-100"
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100"
                       />
                     </div>
                   </div>
@@ -1122,7 +1144,7 @@ export default function OrderDetailsPage() {
                   <button
                     type="button"
                     onClick={() => setEditItem(null)}
-                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
+                    className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-900 dark:text-white"
                   >
                     Отмена
                   </button>
