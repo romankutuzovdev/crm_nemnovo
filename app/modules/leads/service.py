@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time
 from uuid import UUID
 
 import structlog
@@ -91,11 +91,21 @@ class LeadService:
         created_by: UUID,
     ) -> Lead:
         """Заявка из формы календаря «мероприятие» (без заказа и бронирований до конвертации)."""
+        participants = (raw_payload or {}).get("participants") or []
+        service_types: set[str] = set()
+        for p in participants:
+            svc = (p or {}).get("service") or {}
+            st = svc.get("service_type")
+            if st:
+                service_types.add(str(st))
+        lead_service_type: str = (
+            next(iter(service_types)) if len(service_types) == 1 else ServiceType.COMBINED
+        )
         lead = await self.repo.create(
             client_id=primary_client_id,
             source=LeadSource.CALENDAR,
             status=LeadStatus.NEW,
-            service_type=ServiceType.COMBINED,
+            service_type=lead_service_type,
             preferred_date=preferred_date,
             guests_count=guests_count,
             comment=comment,
@@ -105,7 +115,6 @@ class LeadService:
         )
 
         # Store structured service items (so they are editable and auditable later).
-        participants = (raw_payload or {}).get("participants") or []
         created_items = 0
         for p in participants:
             svc = (p or {}).get("service") or {}
@@ -147,12 +156,12 @@ class LeadService:
         lead = await self.repo.get_or_raise(lead_id)
         if lead.status == LeadStatus.CONVERTED:
             raise ValidationError("Cannot modify a converted lead")
-        lead = await self.repo.update(lead_id, client_id=client_id)
+        await self.repo.update(lead_id, client_id=client_id)
         await write_audit_log(
             self.session, updated_by, AuditAction.UPDATE, "leads", lead_id,
             after={"client_id": str(client_id)},
         )
-        return lead
+        return await self.repo.get_with_services_or_raise(lead_id)
 
     async def set_lead_services(self, lead_id: UUID, data: LeadServiceItemsUpdate, updated_by: UUID) -> Lead:
         from app.modules.leads.models import LeadServiceItem
@@ -252,19 +261,30 @@ class LeadService:
         return await self.repo.get_with_services_or_raise(lead_id)
 
     async def update_lead(self, lead_id: UUID, data: LeadUpdate, updated_by: UUID) -> Lead:
-        update_data = data.model_dump(exclude_none=True)
-        # Keep preferred_date in sync with preferred_datetime for calendar UX.
-        if "preferred_datetime" in update_data and update_data.get("preferred_datetime") is not None:
-            update_data["preferred_date"] = update_data["preferred_datetime"].date()
-
         lead = await self.repo.get_or_raise(lead_id)
         if lead.status == LeadStatus.CONVERTED:
             raise ValidationError("Cannot modify a converted lead")
-        lead = await self.repo.update(lead_id, **update_data)
+
+        update_data = data.model_dump(exclude_none=True)
+
+        # Keep preferred_date and preferred_datetime in sync for calendar UX.
+        # Calendar renders preferred_datetime with priority; if only preferred_date changes, the event must move too.
+        if "preferred_datetime" in update_data and update_data.get("preferred_datetime") is not None:
+            update_data["preferred_date"] = update_data["preferred_datetime"].date()
+        elif "preferred_date" in update_data:
+            pd = update_data.get("preferred_date")
+            if pd is None:
+                update_data["preferred_datetime"] = None
+            else:
+                prev_dt = getattr(lead, "preferred_datetime", None)
+                prev_time = prev_dt.time() if isinstance(prev_dt, datetime) else time(9, 0)
+                update_data["preferred_datetime"] = datetime.combine(pd, prev_time)
+
+        await self.repo.update(lead_id, **update_data)
         await write_audit_log(
             self.session, updated_by, AuditAction.UPDATE, "leads", lead_id, after=update_data
         )
-        return lead
+        return await self.repo.get_with_services_or_raise(lead_id)
 
     async def convert_to_order(self, lead_id: UUID, data: LeadConvertToOrderRequest, created_by: UUID):
         """Конвертирует заявку в заказ и помечает заявку как converted."""

@@ -113,14 +113,18 @@ class CalendarEventMultiCreate(BaseSchema):
     contract_text: str | None = None
     excursion_guide_id: UUID | None = None
     participants: list[CalendarEventParticipantLine]
-    slots: list[CalendarMultiSlotLine]
+    slots: list[CalendarMultiSlotLine] = []
+    preferred_datetime: datetime | None = None
 
     @model_validator(mode="after")
     def validate_required(self) -> "CalendarEventMultiCreate":
         if not self.participants:
             raise ValueError("Нужно добавить хотя бы одного участника")
-        if not self.slots:
-            raise ValueError("Нужно добавить хотя бы один слот")
+        if not self.slots and self.preferred_datetime is None:
+            raise ValueError("Укажите время мероприятия или добавьте слот")
         if self.guests_count < len(self.participants):
             raise ValueError("guests_count не меньше количества участников")
+        types = {p.service.service_type for p in (self.participants or []) if p and p.service}
+        if ServiceType.EXCURSION in types and self.excursion_guide_id is None:
+            raise ValueError("Для экскурсии выберите экскурсовода")
         return self

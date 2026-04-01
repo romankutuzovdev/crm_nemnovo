@@ -56,8 +56,10 @@ interface ParticipantLineForm {
   new_first_name: string;
   new_last_name: string;
   new_phone: string;
+  new_email: string;
   service_type: "rafting" | "hostel" | "rent" | "excursion" | "combined";
   catalog_item_id: string;
+  excursion_guide_id: string;
   description: string;
   quantity: number;
   unit_price: number;
@@ -413,8 +415,10 @@ export default function Calendar() {
         new_first_name: "",
         new_last_name: "",
         new_phone: "",
+        new_email: "",
         service_type: "rafting",
         catalog_item_id: "",
+        excursion_guide_id: "",
         description: "Услуга",
         quantity: 1,
         unit_price: 0,
@@ -1152,7 +1156,7 @@ export default function Calendar() {
 
   const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!addDate || participantLines.length === 0 || slotLines.length === 0) return;
+    if (!addDate || participantLines.length === 0) return;
     if (guestsCount < participantLines.length) {
       alert(
         `Гостей (всего) не может быть меньше количества участников (${participantLines.length}).`
@@ -1176,8 +1180,15 @@ export default function Calendar() {
       alert("Заполните описание всех услуг.");
       return;
     }
-    if (slotLines.some((line) => !line.asset_id || !line.start_datetime || !line.end_datetime)) {
-      alert("Заполните все поля слотов.");
+    if (participantLines.some((p) => p.service_type === "excursion") && !newExcursionGuideId.trim()) {
+      alert("Для экскурсии выберите экскурсовода.");
+      return;
+    }
+    // Слоты необязательны: если слот добавлен, он должен быть заполнен.
+    const anySlotFilled = slotLines.some((line) => !!(line.asset_id || line.start_datetime || line.end_datetime));
+    const anySlotInvalid = slotLines.some((line) => (line.asset_id || line.start_datetime || line.end_datetime) && (!line.asset_id || !line.start_datetime || !line.end_datetime));
+    if (anySlotInvalid) {
+      alert("Заполните выбранный слот полностью или удалите его.");
       return;
     }
     try {
@@ -1190,6 +1201,7 @@ export default function Calendar() {
           contract_id: newContractId.trim() ? newContractId.trim() : null,
           contract_text: newContractText.trim() ? newContractText.trim() : null,
           excursion_guide_id: newExcursionGuideId.trim() ? newExcursionGuideId.trim() : null,
+          preferred_datetime: new Date(addDate.start).toISOString(),
           participants: participantLines.map((line) => {
             const service = {
               service_type: line.service_type,
@@ -1209,12 +1221,14 @@ export default function Calendar() {
             }
             return { client_id: line.client_id, service };
           }),
-          slots: slotLines.map((line) => ({
-            asset_id: line.asset_id,
-            start_datetime: new Date(line.start_datetime).toISOString(),
-            end_datetime: new Date(line.end_datetime).toISOString(),
-            quantity: line.quantity,
-          })),
+          slots: anySlotFilled ? slotLines
+            .filter((line) => line.asset_id && line.start_datetime && line.end_datetime)
+            .map((line) => ({
+              asset_id: line.asset_id,
+              start_datetime: new Date(line.start_datetime).toISOString(),
+              end_datetime: new Date(line.end_datetime).toISOString(),
+              quantity: line.quantity,
+            })) : [],
         }),
       });
       setShowAddModal(false);
@@ -1453,29 +1467,6 @@ export default function Calendar() {
               </div>
 
               <div className="space-y-3">
-                <div>
-                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
-                    Экскурсовод (для экскурсий)
-                  </label>
-                  <select
-                    value={newExcursionGuideId}
-                    onChange={(e) => setNewExcursionGuideId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                  >
-                    <option value="">—</option>
-                    {excursionGuides
-                      .filter((g) => g.is_active)
-                      .map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.full_name}
-                          {g.phone ? ` — ${g.phone}` : ""}
-                        </option>
-                      ))}
-                  </select>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Можно оставить пустым. Поле сохраняется в заявке и потом редактируется.
-                  </p>
-                </div>
                 <div className="relative">
                   <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
                     Договор — поиск по номеру или компании
@@ -1553,8 +1544,10 @@ export default function Calendar() {
                           new_first_name: "",
                           new_last_name: "",
                           new_phone: "",
+                          new_email: "",
                           service_type: "rafting",
                           catalog_item_id: "",
+                          excursion_guide_id: "",
                           description: "Услуга",
                           quantity: 1,
                           unit_price: 0,
@@ -1679,6 +1672,10 @@ export default function Calendar() {
                                     ...row,
                                     service_type: nextType,
                                     catalog_item_id: first?.id ?? "",
+                                    excursion_guide_id:
+                                      nextType === "excursion"
+                                        ? (newExcursionGuideId.trim() || row.excursion_guide_id)
+                                        : "",
                                     description: first?.description ?? row.description,
                                     unit_price: first?.unit_price ?? row.unit_price,
                                     total_price:
@@ -1693,6 +1690,7 @@ export default function Calendar() {
                         <option value="rafting">Сплав</option>
                         <option value="hostel">Хостел</option>
                         <option value="rent">Аренда</option>
+                        <option value="excursion">Экскурсия</option>
                         <option value="combined">Комбо</option>
                       </select>
                       <select
@@ -1716,7 +1714,9 @@ export default function Calendar() {
                             });
                           })
                         }
-                        className="col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        className={`col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 ${
+                          line.service_type === "excursion" ? "sm:col-span-3" : ""
+                        }`}
                       >
                         <option value="">Выберите услугу...</option>
                         {getCatalogOptionsByType(line.service_type).map((option) => (
@@ -1734,8 +1734,44 @@ export default function Calendar() {
                             prev.map((row, i) => (i === idx ? { ...row, description: e.target.value } : row))
                           )
                         }
-                        className="col-span-12 sm:col-span-5 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        className={`col-span-12 sm:col-span-5 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 ${
+                          line.service_type === "excursion" ? "sm:col-span-3" : ""
+                        }`}
                       />
+                      {line.service_type === "excursion" && (
+                        <div className="col-span-12 sm:col-span-3">
+                          <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
+                            Экскурсовод
+                          </label>
+                          <select
+                            value={line.excursion_guide_id || newExcursionGuideId}
+                            onChange={(e) => {
+                              const gid = e.target.value;
+                              setNewExcursionGuideId(gid);
+                              setParticipantLines((prev) =>
+                                prev.map((row, i) =>
+                                  i === idx
+                                    ? { ...row, excursion_guide_id: gid }
+                                    : row.service_type === "excursion"
+                                      ? { ...row, excursion_guide_id: gid }
+                                      : row
+                                )
+                              );
+                            }}
+                            className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                          >
+                            <option value="">Выберите…</option>
+                            {excursionGuides
+                              .filter((g) => g.is_active)
+                              .map((g) => (
+                                <option key={g.id} value={g.id}>
+                                  {g.full_name}
+                                  {g.phone ? ` — ${g.phone}` : ""}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-12 gap-2 items-end">
@@ -2289,6 +2325,7 @@ export default function Calendar() {
                     <option value="rafting">Сплав</option>
                     <option value="hostel">Хостел</option>
                     <option value="rent">Аренда</option>
+                    <option value="excursion">Экскурсия</option>
                     <option value="combined">Комбо</option>
                   </select>
                 </div>
@@ -2692,7 +2729,7 @@ export default function Calendar() {
                                 lines: p.lines.length === 1 ? p.lines : p.lines.filter((_, i) => i !== idx),
                               }))
                             }
-                            className="col-span-12 sm:col-span-2 md:col-span-1 px-3 py-2.5 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs sm:text-sm text-red-700 dark:text-red-300"
+                            className="col-span-12 sm:col-span-2 md:col-span-1 px-3 py-2.5 rounded bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs sm:text-sm text-red-700 dark:text-red-300 whitespace-nowrap min-w-[96px] justify-self-start"
                           >
                             Удалить
                           </button>

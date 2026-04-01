@@ -236,3 +236,21 @@ class ExcursionDetailResponse(ExcursionListItem):
         gf = float(self.guide_fee or 0)
         obj_cost = self.program_objects_cost_sum
         return round(ti + tr_in - te - tr_ex - gf - obj_cost, 2)
+
+
+class ExcursionUsageSlot(BaseSchema):
+    """Одно мероприятие (экскурсия), использующее экскурсовода."""
+
+    excursion_id: UUID
+    excursion_date: date
+    start_time: time | None = None
+    end_time: time | None = None
+    title: str
+    status: str
+    deal_id: UUID | None = None
+    vehicle_summary: str | None = None
+
+
+class ExcursionGuideUsageGroup(BaseSchema):
+    guide: ExcursionGuideResponse
+    events: list[ExcursionUsageSlot]

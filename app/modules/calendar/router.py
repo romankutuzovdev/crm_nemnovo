@@ -314,11 +314,13 @@ async def create_calendar_multi_event(
 
     if not data.participants:
         raise ValidationError("Нужно добавить хотя бы одного участника с услугой")
-    if not data.slots:
-        raise ValidationError("Нужно добавить хотя бы один слот")
+    if not data.slots and data.preferred_datetime is None:
+        raise ValidationError("Укажите время мероприятия или добавьте слот")
 
-    min_start = min(slot.start_datetime for slot in data.slots)
-    max_end = max(slot.end_datetime for slot in data.slots)
+    min_start = min((slot.start_datetime for slot in data.slots), default=data.preferred_datetime)
+    max_end = max((slot.end_datetime for slot in data.slots), default=data.preferred_datetime)
+    if min_start is None or max_end is None:
+        raise ValidationError("Не удалось определить время мероприятия")
     picked_manager_id = await pick_manager_by_load(db)
     assigned_to = picked_manager_id or current_user.id
 
@@ -354,13 +356,14 @@ async def create_calendar_multi_event(
         comment_lines.append(f"Договор (id в системе): {data.contract_id}")
     # Услуги храним структурно в lead_service_items (см. LeadService.create_from_calendar_multi),
     # чтобы их можно было редактировать и видеть в истории. В комментарий не дублируем.
-    comment_lines.append("Планируемые слоты:")
-    for slot in data.slots:
-        a = await asset_repo.get_or_raise(slot.asset_id)
-        comment_lines.append(
-            f"  • {a.name}: {slot.start_datetime.isoformat()} — {slot.end_datetime.isoformat()}"
-            f"{f' ×{slot.quantity}' if slot.quantity != 1 else ''}"
-        )
+    if data.slots:
+        comment_lines.append("Планируемые слоты:")
+        for slot in data.slots:
+            a = await asset_repo.get_or_raise(slot.asset_id)
+            comment_lines.append(
+                f"  • {a.name}: {slot.start_datetime.isoformat()} — {slot.end_datetime.isoformat()}"
+                f"{f' ×{slot.quantity}' if slot.quantity != 1 else ''}"
+            )
     comment = "\n".join(comment_lines)
 
     raw_payload = data.model_dump(mode="json")

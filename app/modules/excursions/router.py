@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.excursions.schemas import (
+    ExcursionGuideUsageGroup,
     ExcursionClientLinkCreate,
     ExcursionClientLinkUpdate,
     ExcursionCreate,
@@ -20,6 +21,7 @@ from app.modules.excursions.schemas import (
     ExcursionUpdate,
 )
 from app.modules.excursions.service import ExcursionService
+from app.modules.rafting.usage import normalize_usage_range
 
 router = APIRouter(prefix="/excursions", tags=["excursions"])
 
@@ -52,6 +54,36 @@ async def update_guide(
     db: AsyncSession = Depends(get_db),
 ):
     return await ExcursionService(db).update_guide(guide_id, data)
+
+
+@router.get("/guides/usage", response_model=list[ExcursionGuideUsageGroup])
+async def list_guides_usage(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    current_user=require_permission("orders", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Занятость экскурсоводов по экскурсиям в периоде."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.modules.excursions.models import Excursion, ExcursionGuide
+    from app.modules.excursions.usage import build_guide_usage
+    from app.modules.rafting.models import TransportVehicle
+
+    df, dt = normalize_usage_range(date_from, date_to)
+    guides_rows = await db.execute(select(ExcursionGuide))
+    guides = guides_rows.scalars().all()
+
+    stmt = (
+        select(Excursion, TransportVehicle)
+        .outerjoin(TransportVehicle, TransportVehicle.id == Excursion.vehicle_id)
+        .where(Excursion.excursion_date >= df, Excursion.excursion_date <= dt)
+        .options(selectinload(Excursion.program_steps))
+        .order_by(Excursion.excursion_date.asc(), Excursion.created_at.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return build_guide_usage(guides, rows)
 
 
 # --- Экскурсии ---

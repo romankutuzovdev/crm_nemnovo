@@ -39,6 +39,7 @@ from app.modules.payments.models import Invoice, Payment
 from app.modules.rafting.models import RaftingInstructor, RaftingRoute, RaftingTrip, TransportVehicle
 from app.modules.rent.models import RentCatalogItem, RentOrder, RentOrderLine
 from app.modules.users.models import AuditLog, User
+from app.modules.excursions.models import ExcursionGuide
 from app.shared.enums import (
     BookingStatus,
     DealStatus,
@@ -129,6 +130,22 @@ async def seed_demo(session: AsyncSession) -> None:
 
     client_a = await ensure_client("+79990000001", "Алексей", "Демов", co1)
     client_b = await ensure_client("+79990000002", "Мария", "Тестова", co2)
+
+    # --- Excursion guides ---
+    async def ensure_excursion_guide(full_name: str, phone: str | None = None) -> ExcursionGuide:
+        q = await session.execute(select(ExcursionGuide).where(ExcursionGuide.full_name == full_name))
+        g = q.scalar_one_or_none()
+        if g:
+            return g
+        g = ExcursionGuide(full_name=full_name, phone=phone, is_active=True)
+        session.add(g)
+        await session.flush()
+        print(f"  + экскурсовод {full_name}")
+        return g
+
+    await ensure_excursion_guide("Демо Экскурсовод Анна Петрова", "+79995550011")
+    await ensure_excursion_guide("Демо Экскурсовод Сергей Иванов", "+79995550022")
+    await ensure_excursion_guide("Демо Экскурсовод Ольга Смирнова", "+79995550033")
 
     async def ensure_note(client: Client, text: str) -> None:
         q = await session.execute(

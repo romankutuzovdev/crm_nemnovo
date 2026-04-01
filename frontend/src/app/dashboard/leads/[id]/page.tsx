@@ -269,20 +269,7 @@ export default function LeadDetailPage() {
     },
   });
 
-  if (leadQuery.isLoading) return <div className="text-text-secondary">Загрузка…</div>;
-  if (leadQuery.error || !leadQuery.data)
-    return (
-      <div className="space-y-2">
-        <p className="text-error">
-          Ошибка: {leadQuery.error instanceof Error ? leadQuery.error.message : "Не удалось загрузить заявку"}
-        </p>
-        <Link href="/dashboard/leads" className="text-primary hover:underline">
-          ← К списку заявок
-        </Link>
-      </div>
-    );
-
-  const lead = leadQuery.data;
+  const lead = leadQuery.data ?? null;
   const assetsById = useMemo(() => {
     const rows = assetsQuery.data ?? [];
     return Object.fromEntries(rows.map((a) => [a.id, a]));
@@ -294,14 +281,27 @@ export default function LeadDetailPage() {
   }, [guidesQuery.data]);
 
   const calendarParticipants = useMemo(() => {
-    const p = (lead.raw_payload as any)?.participants;
+    const p = (lead?.raw_payload as any)?.participants;
     return Array.isArray(p) ? p : [];
-  }, [lead.raw_payload]);
+  }, [lead?.raw_payload]);
 
   const calendarSlots = useMemo(() => {
-    const s = (lead.raw_payload as any)?.slots;
+    const s = (lead?.raw_payload as any)?.slots;
     return Array.isArray(s) ? s : [];
-  }, [lead.raw_payload]);
+  }, [lead?.raw_payload]);
+
+  if (leadQuery.isLoading) return <div className="text-text-secondary">Загрузка…</div>;
+  if (leadQuery.error || !lead)
+    return (
+      <div className="space-y-2">
+        <p className="text-error">
+          Ошибка: {leadQuery.error instanceof Error ? leadQuery.error.message : "Не удалось загрузить заявку"}
+        </p>
+        <Link href="/dashboard/leads" className="text-primary hover:underline">
+          ← К списку заявок
+        </Link>
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -654,9 +654,9 @@ export default function LeadDetailPage() {
                         className="w-full px-3 py-2 rounded-lg bg-surface border border-border text-sm"
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                       <label className="sm:hidden block text-xs text-text-secondary">Цена</label>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 min-w-0">
                         <input
                           type="number"
                           min={0}
@@ -667,13 +667,13 @@ export default function LeadDetailPage() {
                               s.map((r, i) => (i === idx ? { ...r, unit_price: Number(e.target.value || 0) } : r))
                             )
                           }
-                          className="flex-1 px-3 py-2 rounded-lg bg-surface border border-border text-sm"
+                          className="flex-1 min-w-0 w-full px-3 py-2 rounded-lg bg-surface border border-border text-sm"
                           placeholder="₽"
                         />
                         <button
                           type="button"
                           onClick={() => setServiceDraft((s) => s.filter((_, i) => i !== idx))}
-                          className="px-3 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm"
+                          className="shrink-0 px-3 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm"
                           title="Удалить строку"
                         >
                           ×

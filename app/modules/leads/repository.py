@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -10,6 +12,20 @@ from app.shared.enums import LeadStatus
 
 class LeadRepository(BaseRepository[Lead]):
     model = Lead
+
+    async def list(self, filters: dict | None = None, offset: int = 0, limit: int = 50) -> list[Lead]:
+        """
+        Override базового list, чтобы заранее подгружать service_items.
+        Иначе при сериализации LeadResponse -> services может случиться lazy-load в async-контексте
+        и упасть с MissingGreenlet.
+        """
+        stmt = select(Lead).options(selectinload(Lead.service_items)).order_by(Lead.created_at.desc())
+        if filters:
+            for key, value in filters.items():
+                stmt = stmt.where(getattr(Lead, key) == value)
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_with_services_or_raise(self, lead_id):
         result = await self.session.execute(
@@ -45,6 +61,7 @@ class LeadRepository(BaseRepository[Lead]):
     async def list_by_status(self, status: LeadStatus, offset: int = 0, limit: int = 50) -> list[Lead]:
         result = await self.session.execute(
             select(Lead)
+            .options(selectinload(Lead.service_items))
             .where(Lead.status == status)
             .order_by(Lead.created_at.desc())
             .offset(offset).limit(limit)
@@ -54,6 +71,7 @@ class LeadRepository(BaseRepository[Lead]):
     async def list_by_manager(self, manager_id: UUID, offset: int = 0, limit: int = 50) -> list[Lead]:
         result = await self.session.execute(
             select(Lead)
+            .options(selectinload(Lead.service_items))
             .where(Lead.assigned_to == manager_id)
             .order_by(Lead.created_at.desc())
             .offset(offset).limit(limit)
