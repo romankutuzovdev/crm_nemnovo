@@ -59,6 +59,7 @@ export default function DashboardLayout({
     { href: "/dashboard", label: "Главная" },
     { href: "/dashboard/calendar", label: "Календарь" },
     { href: "/dashboard/leads", label: "Заявки" },
+    { href: "/dashboard/calls", label: "Звонки" },
     { href: "/dashboard/clients", label: "Клиенты" },
     { href: "/dashboard/companies", label: "Компании" },
     { href: "/dashboard/orders", label: "Заказы" },

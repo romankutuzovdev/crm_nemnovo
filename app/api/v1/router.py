@@ -19,6 +19,7 @@ from app.modules.hostel.router import router as hostel_router
 from app.modules.rent.router import router as rent_router
 from app.modules.ui_settings.router import router as ui_settings_router
 from app.modules.excursions.router import router as excursions_router
+from app.modules.telephony.router import router as telephony_router
 
 api_router = APIRouter()
 
@@ -41,3 +42,4 @@ api_router.include_router(excursions_router)
 api_router.include_router(hostel_router)
 api_router.include_router(rent_router)
 api_router.include_router(ui_settings_router)
+api_router.include_router(telephony_router)

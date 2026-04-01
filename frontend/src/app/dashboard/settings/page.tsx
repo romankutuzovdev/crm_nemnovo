@@ -9,6 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8888";
 const API_PREFIX = "/api/v1";
 const SITE_WEBHOOK_PATH = `${API_PREFIX}/webhooks/site`;
 const TELEPHONY_WEBHOOK_PATH = `${API_PREFIX}/webhooks/telephony`;
+const MTS_VATS_WEBHOOK_PATH = `${API_PREFIX}/webhooks/mts-vats`;
 
 const EXAMPLE_JSON = `{
   "first_name": "Иван",
@@ -148,6 +149,7 @@ function CalendarColorsSection() {
 export default function SettingsPage() {
   const fullUrl = `${API_URL}${SITE_WEBHOOK_PATH}`;
   const telephonyUrl = `${API_URL}${TELEPHONY_WEBHOOK_PATH}`;
+  const mtsVatsUrl = `${API_URL}${MTS_VATS_WEBHOOK_PATH}`;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -214,6 +216,40 @@ export default function SettingsPage() {
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5 text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100 mb-2">MTS Виртуальная АТС (webhook)</h2>
+        <p className="text-sm text-slate-400 mb-4">
+          Endpoint для событий MTS VATS. Токен можно передавать в query (<code className="text-slate-300">?token=…</code>) или заголовком{" "}
+          <code className="text-slate-300">X-MTS-Token</code>. Проверка токена включается переменной{" "}
+          <code className="text-slate-300">MTS_VATS_WEBHOOK_TOKEN</code> в окружении бэкенда.
+        </p>
+        <dl className="space-y-3 text-sm">
+          <div>
+            <dt className="text-slate-500">Метод и URL</dt>
+            <dd>
+              <code className="block mt-1 p-2 rounded-lg bg-slate-900 border border-slate-600 break-all">
+                POST {mtsVatsUrl}
+              </code>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Пример (с токеном)</dt>
+            <dd>
+              <code className="block mt-1 p-2 rounded-lg bg-slate-900 border border-slate-600 break-all">
+                POST {mtsVatsUrl}?token=YOUR_TOKEN
+              </code>
+            </dd>
+          </div>
+        </dl>
+        <p className="text-xs text-slate-500 mt-3">
+          Документация провайдера:{" "}
+          <a className="text-brandBlue-300 hover:underline" href="https://api.vats.mts.by/#/docs/crmapi/v1/general%23description" target="_blank" rel="noreferrer">
+            API portal
+          </a>
+          .
+        </p>
       </section>
 
       <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5 text-slate-300">

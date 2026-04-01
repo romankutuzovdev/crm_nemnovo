@@ -213,6 +213,27 @@ class IntegrationService:
             if call_id is None:
                 call_id = self._nested_pick(payload, [("call", "id"), ("data", "call_id")])
 
+            recording_url = self._pick(
+                payload,
+                "recording_url",
+                "recordingUrl",
+                "record_url",
+                "recordUrl",
+                "recording",
+                "record",
+            )
+            if recording_url is None:
+                recording_url = self._nested_pick(
+                    payload,
+                    [
+                        ("call", "recording_url"),
+                        ("call", "recordingUrl"),
+                        ("call", "recording"),
+                        ("data", "recording_url"),
+                        ("data", "recording"),
+                    ],
+                )
+
             mapped_payload = dict(payload)
             mapped_payload["_integration"] = "mts_vats"
             mapped_payload["_normalized"] = {
@@ -220,7 +241,10 @@ class IntegrationService:
                 "direction": direction,
                 "caller_phone": str(caller_phone),
                 "call_id": str(call_id) if call_id is not None else None,
+                "recording_url": str(recording_url) if recording_url is not None else None,
             }
+            if recording_url is not None and "recording_url" not in mapped_payload:
+                mapped_payload["recording_url"] = str(recording_url)
 
             # Reuse existing generic telephony flow for dedupe and lead creation.
             result = await self._process_telephony_payload(
