@@ -356,17 +356,46 @@ async def create_calendar_multi_event(
         comment_lines.append(f"Договор (id в системе): {data.contract_id}")
     # Услуги храним структурно в lead_service_items (см. LeadService.create_from_calendar_multi),
     # чтобы их можно было редактировать и видеть в истории. В комментарий не дублируем.
+    def _participant_label(payload: dict, idx: int) -> str:
+        parts = (payload or {}).get("participants") or []
+        if not isinstance(parts, list) or idx < 0 or idx >= len(parts):
+            return f"Участник {idx + 1}"
+        p = parts[idx] or {}
+        if isinstance(p, dict):
+            nc = p.get("new_client")
+            if isinstance(nc, dict):
+                first = str(nc.get("first_name") or "").strip()
+                last = str(nc.get("last_name") or "").strip()
+                phone = str(nc.get("phone") or "").strip()
+                nm = f"{first} {last}".strip() or "Новый клиент"
+                return f"{nm}{f' · {phone}' if phone else ''}"
+            cid = p.get("client_id")
+            if cid:
+                return f"Клиент {str(cid)[:8]}…"
+        return f"Участник {idx + 1}"
+
     if data.slots:
         comment_lines.append("Планируемые слоты:")
+        payload_for_labels = data.model_dump(mode="json")
         for slot in data.slots:
             a = await asset_repo.get_or_raise(slot.asset_id)
+            who = ""
+            if getattr(slot, "participant_idx", None) is not None:
+                who = f"{_participant_label(payload_for_labels, int(slot.participant_idx))}: "
+            price = ""
+            if getattr(slot, "unit_price", 0) not in (None, 0):
+                up = float(getattr(slot, "unit_price") or 0)
+                if up:
+                    price = f" · {up:g} ₽"
             comment_lines.append(
-                f"  • {a.name}: {slot.start_datetime.isoformat()} — {slot.end_datetime.isoformat()}"
-                f"{f' ×{slot.quantity}' if slot.quantity != 1 else ''}"
+                f"  • {who}{a.name}: {slot.start_datetime.isoformat()} — {slot.end_datetime.isoformat()}"
+                f"{f' ×{slot.quantity}' if slot.quantity != 1 else ''}{price}"
             )
     comment = "\n".join(comment_lines)
 
     raw_payload = data.model_dump(mode="json")
+    if raw_payload.get("title") is not None:
+        raw_payload["title"] = str(raw_payload.get("title") or "").strip() or None
     raw_payload["calendar_slot_end_date"] = max_end.date().isoformat()
 
     lead_service = LeadService(db)
@@ -386,3 +415,159 @@ async def create_calendar_multi_event(
         "assigned_to": str(assigned_to),
         "message": "Заявка создана",
     }
+
+
+@router.patch("/events/multi/{lead_id}")
+async def update_calendar_multi_event(
+    lead_id: UUID,
+    data: CalendarEventMultiCreate,
+    current_user=require_permission("leads", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Редактирование заявки-мероприятия из календарной формы (участники, услуги, слоты)."""
+    from sqlalchemy import delete, select
+
+    from app.core.audit import write_audit_log
+    from app.core.exceptions import NotFoundError, ValidationError
+    from app.modules.assets.repository import AssetRepository
+    from app.modules.clients.repository import ClientRepository
+    from app.modules.clients.service import ClientService
+    from app.modules.leads.models import Lead, LeadServiceItem
+    from app.shared.enums import AuditAction, LeadStatus
+
+    row = await db.execute(select(Lead).where(Lead.id == lead_id))
+    lead = row.scalar_one_or_none()
+    if not lead:
+        raise NotFoundError("Заявка не найдена")
+    if str(lead.source) != "calendar":
+        raise ValidationError("Редактирование через календарную форму доступно только для заявок календаря")
+    if lead.status == LeadStatus.CONVERTED:
+        raise ValidationError("Нельзя редактировать конвертированную заявку")
+    if current_user.role.name == "manager" and lead.assigned_to != current_user.id:
+        from app.core.exceptions import ForbiddenError
+
+        raise ForbiddenError("Access denied")
+
+    min_start = min((slot.start_datetime for slot in data.slots), default=data.preferred_datetime)
+    max_end = max((slot.end_datetime for slot in data.slots), default=data.preferred_datetime)
+    if min_start is None or max_end is None:
+        raise ValidationError("Не удалось определить время мероприятия")
+
+    client_service = ClientService(db)
+    client_repo = ClientRepository(db)
+    asset_repo = AssetRepository(db)
+    participant_client_ids: list[UUID] = []
+    for p in data.participants:
+        if p.new_client is not None:
+            nc = p.new_client
+            client, _ = await client_service.find_or_create_by_phone(
+                phone=nc.phone,
+                first_name=nc.first_name,
+                last_name=nc.last_name,
+                email=nc.email,
+                source="calendar_event",
+                created_by=current_user.id,
+            )
+            participant_client_ids.append(client.id)
+        elif p.client_id is not None:
+            await client_repo.get_or_raise(p.client_id)
+            participant_client_ids.append(p.client_id)
+
+    primary_client_id = participant_client_ids[0]
+    guests = max(data.guests_count, len(data.participants))
+
+    comment_lines: list[str] = []
+    if data.notes and data.notes.strip():
+        comment_lines.append(data.notes.strip())
+    if data.contract_text and data.contract_text.strip():
+        comment_lines.append(f"Договор (текст): {data.contract_text.strip()}")
+    if data.contract_id:
+        comment_lines.append(f"Договор (id в системе): {data.contract_id}")
+
+    def _participant_label(payload: dict, idx: int) -> str:
+        parts = (payload or {}).get("participants") or []
+        if not isinstance(parts, list) or idx < 0 or idx >= len(parts):
+            return f"Участник {idx + 1}"
+        p = parts[idx] or {}
+        if isinstance(p, dict):
+            nc = p.get("new_client")
+            if isinstance(nc, dict):
+                first = str(nc.get("first_name") or "").strip()
+                last = str(nc.get("last_name") or "").strip()
+                phone = str(nc.get("phone") or "").strip()
+                nm = f"{first} {last}".strip() or "Новый клиент"
+                return f"{nm}{f' · {phone}' if phone else ''}"
+            cid = p.get("client_id")
+            if cid:
+                return f"Клиент {str(cid)[:8]}…"
+        return f"Участник {idx + 1}"
+
+    if data.slots:
+        comment_lines.append("Планируемые слоты:")
+        payload_for_labels = data.model_dump(mode="json")
+        for slot in data.slots:
+            a = await asset_repo.get_or_raise(slot.asset_id)
+            who = ""
+            if getattr(slot, "participant_idx", None) is not None:
+                who = f"{_participant_label(payload_for_labels, int(slot.participant_idx))}: "
+            price = ""
+            if getattr(slot, "unit_price", 0) not in (None, 0):
+                up = float(getattr(slot, "unit_price") or 0)
+                if up:
+                    price = f" · {up:g} ₽"
+            comment_lines.append(
+                f"  • {who}{a.name}: {slot.start_datetime.isoformat()} — {slot.end_datetime.isoformat()}"
+                f"{f' ×{slot.quantity}' if slot.quantity != 1 else ''}{price}"
+            )
+    comment = "\n".join(comment_lines)
+
+    raw_payload = data.model_dump(mode="json")
+    if raw_payload.get("title") is not None:
+        raw_payload["title"] = str(raw_payload.get("title") or "").strip() or None
+    raw_payload["calendar_slot_end_date"] = max_end.date().isoformat()
+
+    service_types: set[str] = set()
+    for p in data.participants:
+        st = getattr(getattr(p, "service", None), "service_type", None)
+        if st:
+            service_types.add(str(st))
+    lead_service_type = next(iter(service_types)) if len(service_types) == 1 else ServiceType.COMBINED
+
+    lead.client_id = primary_client_id
+    lead.service_type = str(lead_service_type)
+    lead.guests_count = guests
+    lead.comment = comment
+    lead.raw_payload = raw_payload
+    lead.excursion_guide_id = data.excursion_guide_id
+    lead.preferred_datetime = min_start.replace(tzinfo=None)
+    lead.preferred_date = min_start.date()
+
+    await db.execute(delete(LeadServiceItem).where(LeadServiceItem.lead_id == lead.id))
+    for idx, p in enumerate(data.participants):
+        svc = p.service
+        db.add(
+            LeadServiceItem(
+                lead_id=lead.id,
+                client_id=participant_client_ids[idx] if idx < len(participant_client_ids) else primary_client_id,
+                service_type=str(svc.service_type),
+                description=str(svc.description),
+                quantity=int(svc.quantity),
+                unit_price=float(svc.unit_price),
+            )
+        )
+
+    await write_audit_log(
+        db,
+        current_user.id,
+        AuditAction.UPDATE,
+        "leads",
+        lead.id,
+        after={
+            "calendar_edit": True,
+            "guests_count": guests,
+            "participants_count": len(data.participants),
+            "slots_count": len(data.slots),
+        },
+    )
+
+    return {"ok": True, "lead_id": str(lead.id), "message": "Заявка обновлена"}

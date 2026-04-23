@@ -168,8 +168,6 @@ class LeadService:
         from sqlalchemy import delete
 
         lead = await self.repo.get_with_services_or_raise(lead_id)
-        if lead.status == LeadStatus.CONVERTED:
-            raise ValidationError("Cannot modify a converted lead")
 
         prev = [
             {
@@ -218,8 +216,6 @@ class LeadService:
         from sqlalchemy import delete
 
         lead = await self.repo.get_with_services_or_raise(lead_id)
-        if lead.status == LeadStatus.CONVERTED:
-            raise ValidationError("Cannot modify a converted lead")
         if lead.service_items and len(lead.service_items) > 0:
             return lead
 
@@ -262,10 +258,12 @@ class LeadService:
 
     async def update_lead(self, lead_id: UUID, data: LeadUpdate, updated_by: UUID) -> Lead:
         lead = await self.repo.get_or_raise(lead_id)
-        if lead.status == LeadStatus.CONVERTED:
-            raise ValidationError("Cannot modify a converted lead")
 
         update_data = data.model_dump(exclude_none=True)
+        if lead.status == LeadStatus.CONVERTED and "status" in update_data:
+            next_status = getattr(update_data["status"], "value", update_data["status"])
+            if next_status != LeadStatus.CONVERTED.value:
+                raise ValidationError("Cannot change status for a converted lead")
 
         # Keep preferred_date and preferred_datetime in sync for calendar UX.
         # Calendar renders preferred_datetime with priority; if only preferred_date changes, the event must move too.

@@ -141,13 +141,13 @@ export default function DashboardPage() {
               <div className="rounded-lg bg-surface-hover border border-border px-4 py-3">
                 <div className="text-text-secondary text-sm">Выручка за период</div>
                 <div className="text-xl font-semibold text-primary mt-1">
-                  {Number(summary.revenue_in_period).toLocaleString("ru")} ₽
+                  {Number(summary.revenue_in_period).toLocaleString("ru")} BYN
                 </div>
               </div>
               <div className="rounded-lg bg-surface-hover border border-border px-4 py-3">
                 <div className="text-text-secondary text-sm">Задолженность (снимок)</div>
                 <div className="text-xl font-semibold text-text mt-1">
-                  {Number(summary.outstanding_debt).toLocaleString("ru")} ₽
+                  {Number(summary.outstanding_debt).toLocaleString("ru")} BYN
                 </div>
               </div>
             </div>

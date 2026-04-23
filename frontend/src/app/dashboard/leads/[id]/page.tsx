@@ -221,6 +221,7 @@ export default function LeadDetailPage() {
   useEffect(() => {
     const l = leadQuery.data;
     if (!l) return;
+    if (l.status === "converted") return;
     if ((l.services?.length ?? 0) > 0) return;
     // Auto-backfill legacy calendar leads (services were stored only in comment/raw_payload).
     if (!importServices.isPending && !importServices.isSuccess) {
@@ -558,13 +559,18 @@ export default function LeadDetailPage() {
                     const assetId = s?.asset_id ? String(s.asset_id) : "";
                     const asset = assetId ? assetsById[assetId] : undefined;
                     const label = asset ? `${asset.name} (${asset.code})` : assetId ? `Актив ${assetId}` : "—";
+                    const qty = s?.quantity != null ? Number(s.quantity) : null;
+                    const unit = s?.unit_price != null ? Number(s.unit_price) : null;
+                    const total = qty != null && unit != null ? qty * unit : null;
                     return (
                       <li key={i} className="text-text-secondary">
                         <span className="text-text">{label}</span>{" "}
                         <span>
                           {s?.start_datetime ? String(s.start_datetime) : "—"} —{" "}
                           {s?.end_datetime ? String(s.end_datetime) : "—"}
-                          {s?.quantity != null ? ` ×${Number(s.quantity)}` : ""}
+                          {qty != null ? ` ×${qty}` : ""}
+                          {unit != null ? ` · ${unit.toLocaleString("ru")} BYN` : ""}
+                          {total != null ? ` (итого: ${total.toLocaleString("ru")} BYN)` : ""}
                         </span>
                       </li>
                     );
@@ -668,7 +674,7 @@ export default function LeadDetailPage() {
                             )
                           }
                           className="flex-1 min-w-0 w-full px-3 py-2 rounded-lg bg-surface border border-border text-sm"
-                          placeholder="₽"
+                          placeholder="BYN"
                         />
                         <button
                           type="button"

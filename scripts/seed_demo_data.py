@@ -15,12 +15,6 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    import bcrypt  # noqa: F401
-except ModuleNotFoundError:
-    print("Активируйте venv проекта и выполните: pip install -e .", file=sys.stderr)
-    sys.exit(1)
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -92,6 +86,10 @@ async def seed_demo(session: AsyncSession) -> None:
         return a
 
     asset_k1 = await ensure_asset("DEMO-K1", "Демо байдарка 1", "kayak")
+    await ensure_asset("DEMO-K2", "Демо байдарка 2", "kayak")
+    await ensure_asset("DEMO-SUP1", "Демо SUP-доска", "sup")
+    await ensure_asset("DEMO-BUS1", "Демо микроавтобус 18 мест", "transport")
+    await ensure_asset("DEMO-TENT1", "Демо туристическая палатка", "camping")
     await ensure_asset("DEMO-R1", "Демо гостевая комната", "hostel_room")
 
     # --- Companies & clients ---
@@ -130,6 +128,9 @@ async def seed_demo(session: AsyncSession) -> None:
 
     client_a = await ensure_client("+79990000001", "Алексей", "Демов", co1)
     client_b = await ensure_client("+79990000002", "Мария", "Тестова", co2)
+    client_c = await ensure_client("+79990000003", "Игорь", "Маршрутов", None)
+    client_d = await ensure_client("+79990000004", "Наталья", "Байдаркина", co1)
+    demo_clients = [client_a, client_b, client_c, client_d]
 
     # --- Excursion guides ---
     async def ensure_excursion_guide(full_name: str, phone: str | None = None) -> ExcursionGuide:
@@ -185,7 +186,19 @@ async def seed_demo(session: AsyncSession) -> None:
     await ensure_lead("02", LeadStatus.IN_PROGRESS)
 
     # --- Deals ---
-    async def ensure_deal(number: str, client: Client, lead: Lead | None) -> Deal:
+    async def ensure_deal(
+        number: str,
+        client: Client,
+        lead: Lead | None,
+        *,
+        service_type: ServiceType = ServiceType.RAFTING,
+        tour_title: str | None = None,
+        tour_type: str | None = None,
+        tour_status: str | None = None,
+        guests: int = 2,
+        total_amount: Decimal = Decimal("15000.00"),
+        paid_amount: Decimal = Decimal("5000.00"),
+    ) -> Deal:
         q = await session.execute(select(Deal).where(Deal.number == number))
         d = q.scalar_one_or_none()
         if d:
@@ -196,13 +209,16 @@ async def seed_demo(session: AsyncSession) -> None:
             client_id=client.id,
             lead_id=lead.id if lead else None,
             assigned_to=actor.id,
-            service_type=ServiceType.RAFTING,
+            service_type=service_type,
+            tour_title=tour_title,
+            tour_type=tour_type,
+            tour_status=tour_status,
             status=DealStatus.CONFIRMED,
             start_date=d0,
             end_date=d0 + timedelta(days=1),
-            guests_count=2,
-            total_amount=Decimal("15000.00"),
-            paid_amount=Decimal("5000.00"),
+            guests_count=guests,
+            total_amount=total_amount,
+            paid_amount=paid_amount,
             payment_status=PaymentStatus.PARTIAL,
             notes="Демо-сделка",
             created_by=actor.id,
@@ -212,8 +228,54 @@ async def seed_demo(session: AsyncSession) -> None:
         print(f"  + сделка {number}")
         return d
 
-    deal1 = await ensure_deal("DEMO-ORD-001", client_a, lead1)
-    deal2 = await ensure_deal("DEMO-ORD-002", client_b, None)
+    deal1 = await ensure_deal(
+        "DEMO-ORD-001",
+        client_a,
+        lead1,
+        service_type=ServiceType.RAFTING,
+        tour_title="Нарочанский водный маршрут",
+        tour_type="Групповой",
+        tour_status="Подтвержден",
+        guests=6,
+        total_amount=Decimal("26500.00"),
+        paid_amount=Decimal("9000.00"),
+    )
+    deal2 = await ensure_deal(
+        "DEMO-ORD-002",
+        client_b,
+        None,
+        service_type=ServiceType.COMBINED,
+        tour_title="Выездной тур: байдарки + экскурсия",
+        tour_type="Корпоративный",
+        tour_status="В работе",
+        guests=10,
+        total_amount=Decimal("48000.00"),
+        paid_amount=Decimal("12000.00"),
+    )
+    deal3 = await ensure_deal(
+        "DEMO-ORD-003",
+        client_c,
+        None,
+        service_type=ServiceType.RENT,
+        tour_title="Прокат комплекта на выходные",
+        tour_type="Индивидуальный",
+        tour_status="Новый",
+        guests=3,
+        total_amount=Decimal("9200.00"),
+        paid_amount=Decimal("2000.00"),
+    )
+    deal4 = await ensure_deal(
+        "DEMO-ORD-004",
+        client_d,
+        None,
+        service_type=ServiceType.HOSTEL,
+        tour_title="Экскурсия + проживание",
+        tour_type="Школьная группа",
+        tour_status="Набор",
+        guests=18,
+        total_amount=Decimal("82000.00"),
+        paid_amount=Decimal("25000.00"),
+    )
 
     async def ensure_deal_item(
         deal: Deal,
@@ -222,6 +284,8 @@ async def seed_demo(session: AsyncSession) -> None:
         *,
         link_kayak: bool = False,
         product: Product | None = None,
+        client: Client | None = None,
+        qty: int = 1,
     ) -> None:
         aid = asset_k1.id if link_kayak else None
         pid = product.id if product else None
@@ -235,18 +299,28 @@ async def seed_demo(session: AsyncSession) -> None:
                 deal_id=deal.id,
                 asset_id=aid,
                 product_id=pid,
+                client_id=client.id if client else None,
                 description=desc,
-                quantity=1,
+                quantity=qty,
                 unit_price=price,
-                total_price=price,
+                total_price=price * qty,
             )
         )
         print(f"  + позиция сделки: {desc}")
 
-    await ensure_deal_item(deal1, "Демо: аренда байдарки", Decimal("8000.00"), link_kayak=True)
+    await ensure_deal_item(deal1, "Демо: аренда байдарки", Decimal("4000.00"), link_kayak=True, client=client_a, qty=2)
     await ensure_deal_item(
-        deal1, "Демо: сопровождение инструктора", Decimal("7000.00"), link_kayak=False
+        deal1, "Демо: сопровождение инструктора", Decimal("7000.00"), link_kayak=False, client=client_a
     )
+    await ensure_deal_item(deal1, "Демо: трансфер до старта маршрута", Decimal("2500.00"), client=client_b)
+    await ensure_deal_item(deal1, "Демо: питание на маршруте", Decimal("1200.00"), client=client_b, qty=2)
+    await ensure_deal_item(deal2, "Демо: экскурсионная программа", Decimal("18000.00"), client=client_b)
+    await ensure_deal_item(deal2, "Демо: аренда SUP и жилетов", Decimal("3200.00"), client=client_c, qty=2)
+    await ensure_deal_item(deal2, "Демо: аренда микроавтобуса", Decimal("8500.00"), client=client_d)
+    await ensure_deal_item(deal3, "Демо: прокат байдарки на день", Decimal("2700.00"), client=client_c, qty=2)
+    await ensure_deal_item(deal3, "Демо: гермомешок и ремнабор", Decimal("900.00"), client=client_c)
+    await ensure_deal_item(deal4, "Демо: проживание в хостеле", Decimal("1500.00"), client=client_d, qty=18)
+    await ensure_deal_item(deal4, "Демо: экскурсовод на 6 часов", Decimal("9500.00"), client=client_d)
 
     # --- Bookings (фиксированный слот по deal.number — идемпотентно) ---
     base_day = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(
@@ -278,14 +352,16 @@ async def seed_demo(session: AsyncSession) -> None:
 
     await ensure_booking(deal1, 0)
     await ensure_booking(deal2, 1)
+    await ensure_booking(deal3, 2)
+    await ensure_booking(deal4, 3)
 
     # --- Payments ---
-    async def ensure_payment(deal: Deal, ext: str, amount: Decimal) -> None:
+    async def ensure_payment(deal: Deal, ext: str, amount: Decimal, notes: str = "Демо-платёж") -> Payment:
         q = await session.execute(select(Payment).where(Payment.external_id == ext))
-        if q.scalar_one_or_none():
-            return
-        session.add(
-            Payment(
+        existing = q.scalar_one_or_none()
+        if existing:
+            return existing
+        p = Payment(
                 deal_id=deal.id,
                 amount=amount,
                 method=PaymentMethod.CARD,
@@ -293,13 +369,46 @@ async def seed_demo(session: AsyncSession) -> None:
                 external_id=ext,
                 paid_at=utcnow(),
                 confirmed_by=actor.id,
-                notes="Демо-платёж",
+                notes=notes,
+        )
+        session.add(p)
+        await session.flush()
+        print(f"  + платёж {ext}")
+        return p
+
+    pay1 = await ensure_payment(deal1, "demo-pay-001", Decimal("9000.00"), "Предоплата за тур")
+    pay2 = await ensure_payment(deal2, "demo-pay-002", Decimal("12000.00"), "Частичная оплата корпоративного тура")
+    pay3 = await ensure_payment(deal3, "demo-pay-003", Decimal("2000.00"), "Предоплата за прокат")
+    pay4 = await ensure_payment(deal4, "demo-pay-004", Decimal("25000.00"), "Оплата по договору за группу")
+
+    from app.modules.payments.models import PaymentAllocation
+
+    async def ensure_payment_allocation(payment: Payment, client: Client, amount: Decimal, comment: str) -> None:
+        q = await session.execute(
+            select(PaymentAllocation).where(
+                PaymentAllocation.payment_id == payment.id,
+                PaymentAllocation.client_id == client.id,
+                PaymentAllocation.comment == comment,
             )
         )
-        print(f"  + платёж {ext}")
+        if q.scalar_one_or_none():
+            return
+        session.add(
+            PaymentAllocation(
+                payment_id=payment.id,
+                client_id=client.id,
+                amount=amount,
+                comment=comment,
+            )
+        )
+        print(f"  + распределение платежа {payment.external_id} -> {client.first_name}")
 
-    await ensure_payment(deal1, "demo-pay-001", Decimal("5000.00"))
-    await ensure_payment(deal2, "demo-pay-002", Decimal("3000.00"))
+    await ensure_payment_allocation(pay1, client_a, Decimal("6000.00"), "Основной плательщик")
+    await ensure_payment_allocation(pay1, client_b, Decimal("3000.00"), "Попутчик")
+    await ensure_payment_allocation(pay2, client_b, Decimal("7000.00"), "Часть за программу")
+    await ensure_payment_allocation(pay2, client_d, Decimal("5000.00"), "Трансфер и логистика")
+    await ensure_payment_allocation(pay3, client_c, Decimal("2000.00"), "Прокат")
+    await ensure_payment_allocation(pay4, client_d, Decimal("25000.00"), "Групповой заказ")
 
     # --- Invoices ---
     async def ensure_invoice(deal: Deal, suffix: str) -> None:
@@ -322,6 +431,8 @@ async def seed_demo(session: AsyncSession) -> None:
 
     await ensure_invoice(deal1, "001")
     await ensure_invoice(deal2, "002")
+    await ensure_invoice(deal3, "003")
+    await ensure_invoice(deal4, "004")
 
     # --- Products & stock ---
     async def ensure_product(sku: str, name: str) -> Product:
@@ -345,8 +456,12 @@ async def seed_demo(session: AsyncSession) -> None:
 
     p1 = await ensure_product("DEMO-P-SPF", "Демо спасжилет")
     p2 = await ensure_product("DEMO-P-PAD", "Демо сидушка")
+    p3 = await ensure_product("DEMO-P-DRY", "Демо гермомешок 20л")
+    p4 = await ensure_product("DEMO-P-RAIN", "Демо дождевик")
 
-    await ensure_deal_item(deal2, "Демо товар: спасжилет", Decimal("1200.00"), product=p1)
+    await ensure_deal_item(deal2, "Демо товар: спасжилет", Decimal("1200.00"), product=p1, client=client_b)
+    await ensure_deal_item(deal2, "Демо товар: гермомешок", Decimal("900.00"), product=p3, client=client_c)
+    await ensure_deal_item(deal4, "Демо товар: дождевик", Decimal("600.00"), product=p4, client=client_d, qty=4)
 
     async def ensure_stock_mv(product: Product, delta: int, new_q: int) -> None:
         q = await session.execute(
@@ -371,6 +486,8 @@ async def seed_demo(session: AsyncSession) -> None:
 
     await ensure_stock_mv(p1, 5, 10)
     await ensure_stock_mv(p2, 3, 10)
+    await ensure_stock_mv(p3, 7, 14)
+    await ensure_stock_mv(p4, 12, 20)
 
     # --- Asset maintenance ---
     q = await session.execute(
@@ -527,6 +644,7 @@ async def seed_demo(session: AsyncSession) -> None:
 
     await ensure_trip(rt1, deal1, "1", date.today() + timedelta(days=7))
     await ensure_trip(rt2, deal2, "2", date.today() + timedelta(days=8))
+    await ensure_trip(rt1, deal3, "3", date.today() + timedelta(days=10))
 
     # --- Rent ---
     async def ensure_rent_item(name: str) -> RentCatalogItem:
@@ -547,6 +665,8 @@ async def seed_demo(session: AsyncSession) -> None:
 
     ri1 = await ensure_rent_item("Демо палатка 2-местная")
     ri2 = await ensure_rent_item("Демо котелок туристический")
+    ri3 = await ensure_rent_item("Демо байдарка 2-местная (прокат)")
+    ri4 = await ensure_rent_item("Демо весло карбон")
 
     async def ensure_rent_order(deal: Deal | None, suf: str, d: date) -> RentOrder:
         q = await session.execute(select(RentOrder).where(RentOrder.notes == f"demo-rent-{suf}"))
@@ -582,11 +702,32 @@ async def seed_demo(session: AsyncSession) -> None:
                 line_total=Decimal("1000.00"),
             )
         )
+        session.add(
+            RentOrderLine(
+                order_id=ro.id,
+                catalog_item_id=ri3.id,
+                title="Байдарка",
+                quantity=1,
+                unit_price=Decimal("1200.00"),
+                line_total=Decimal("1200.00"),
+            )
+        )
+        session.add(
+            RentOrderLine(
+                order_id=ro.id,
+                catalog_item_id=ri4.id,
+                title="Весло",
+                quantity=2,
+                unit_price=Decimal("250.00"),
+                line_total=Decimal("500.00"),
+            )
+        )
         print(f"  + заказ проката {suf}")
         return ro
 
     await ensure_rent_order(deal1, "a", date.today() + timedelta(days=2))
     await ensure_rent_order(None, "b", date.today() + timedelta(days=3))
+    await ensure_rent_order(deal3, "c", date.today() + timedelta(days=4))
 
     # --- Integrations ---
     async def ensure_webhook(source: str, ip: str) -> None:

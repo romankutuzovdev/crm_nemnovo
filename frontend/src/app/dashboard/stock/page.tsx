@@ -185,7 +185,7 @@ export default function StockPage() {
                   <td className="p-4 font-mono text-sm">{p.sku}</td>
                   <td className="p-4">{p.category ?? "—"}</td>
                   <td className="p-4">{UNIT_LABELS[p.unit] ?? p.unit}</td>
-                  <td className="p-4 text-right">{Number(p.price).toLocaleString("ru")} ₽</td>
+                  <td className="p-4 text-right">{Number(p.price).toLocaleString("ru")} BYN</td>
                   <td className="p-4 text-right">{p.stock_quantity}</td>
                   <td className="p-4">{p.is_rentable ? "да" : "—"}</td>
                   {canWrite && (
@@ -268,7 +268,7 @@ export default function StockPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Цена, ₽</label>
+                <label className="block text-sm text-slate-400 mb-1">Цена, BYN</label>
                 <input
                   type="number"
                   min={0}

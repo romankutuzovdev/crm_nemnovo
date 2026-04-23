@@ -339,18 +339,18 @@ export default function ExcursionDetailPage() {
           <div>
             <span className="text-slate-500">Доход / расход (учёт): </span>
             <span className="text-slate-200">
-              {Number(ex.income_total).toLocaleString("ru")} / {Number(ex.expense_total).toLocaleString("ru")} ₽
+              {Number(ex.income_total).toLocaleString("ru")} / {Number(ex.expense_total).toLocaleString("ru")} BYN
             </span>
           </div>
           <div>
             Транспорт (доход / расход):{" "}
             {ex.transport_income != null ? `${Number(ex.transport_income).toLocaleString("ru")}` : "—"} /{" "}
-            {ex.transport_expense != null ? `${Number(ex.transport_expense).toLocaleString("ru")}` : "—"} ₽
+            {ex.transport_expense != null ? `${Number(ex.transport_expense).toLocaleString("ru")}` : "—"} BYN
           </div>
-          <div>Гонорар экскурсоводу: {ex.guide_fee != null ? `${Number(ex.guide_fee).toLocaleString("ru")} ₽` : "—"}</div>
-          <div>Сумма цен объектов программы: {Number(ex.program_objects_cost_sum).toLocaleString("ru")} ₽</div>
+          <div>Гонорар экскурсоводу: {ex.guide_fee != null ? `${Number(ex.guide_fee).toLocaleString("ru")} BYN` : "—"}</div>
+          <div>Сумма цен объектов программы: {Number(ex.program_objects_cost_sum).toLocaleString("ru")} BYN</div>
           <div className="sm:col-span-2 font-medium text-emerald-400/90">
-            Ориентир баланса: {Number(ex.balance_hint).toLocaleString("ru")} ₽ (доходы минус расходы и цены объектов)
+            Ориентир баланса: {Number(ex.balance_hint).toLocaleString("ru")} BYN (доходы минус расходы и цены объектов)
           </div>
         </div>
         <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-4 pt-2 border-t border-slate-700">
@@ -516,7 +516,7 @@ export default function ExcursionDetailPage() {
                       <span>
                         {o.name}
                         {o.capacity != null ? ` · до ${o.capacity} чел.` : ""} ·{" "}
-                        {Number(o.unit_price).toLocaleString("ru")} ₽
+                        {Number(o.unit_price).toLocaleString("ru")} BYN
                       </span>
                       <button
                         type="button"
@@ -554,7 +554,7 @@ export default function ExcursionDetailPage() {
                     />
                     <input
                       className="px-2 py-1 rounded bg-slate-900 border border-slate-600 text-sm w-28"
-                      placeholder="₽"
+                      placeholder="BYN"
                       value={objForm.stepId === st.id ? objForm.price : ""}
                       onChange={(e) => setObjForm((f) => ({ ...f, price: e.target.value, stepId: st.id }))}
                     />

@@ -343,6 +343,11 @@ class CalendarRepository:
             if client_row:
                 client_name = f"{client_row.first_name} {client_row.last_name}".strip() or None
             title = f"Заявка: {st}"
+            event_title = None
+            if isinstance(getattr(lead, "raw_payload", None), dict):
+                event_title = (lead.raw_payload.get("title") or "").strip() or None
+            if event_title:
+                title = f"{event_title} — {title}"
 
             # "Сборный": если заявка создана из формы мероприятия и содержит несколько участников.
             # Участники лежат в raw_payload.participants (см. create_calendar_multi_event).

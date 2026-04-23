@@ -62,7 +62,7 @@ export default function DealsPage() {
                 <tr key={d.id} className="border-t border-slate-700 hover:bg-slate-800/30">
                   <td className="p-4">{d.number}</td>
                   <td className="p-4">{d.status}</td>
-                  <td className="p-4">{d.total_amount.toLocaleString("ru")} ₽</td>
+                  <td className="p-4">{d.total_amount.toLocaleString("ru")} BYN</td>
                 </tr>
               ))}
             </tbody>

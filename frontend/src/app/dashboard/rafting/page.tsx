@@ -494,7 +494,7 @@ export default function RaftingPage() {
                 />
                 <input
                   className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                  placeholder="₽ за человека по умолчанию (необязательно)"
+                  placeholder="BYN за человека по умолчанию (необязательно)"
                   inputMode="decimal"
                   value={routeForm.default_price_per_person}
                   onChange={(e) =>
@@ -518,7 +518,7 @@ export default function RaftingPage() {
                 <thead className="bg-slate-800/50">
                   <tr>
                     <th className="text-left p-4">Название</th>
-                    <th className="text-left p-4">₽/чел (умолч.)</th>
+                    <th className="text-left p-4">BYN/чел (умолч.)</th>
                     <th className="text-left p-4">Часы</th>
                     <th className="text-left p-4">Активен</th>
                   </tr>
@@ -529,7 +529,7 @@ export default function RaftingPage() {
                       <td className="p-4 font-medium text-slate-200">{r.name}</td>
                       <td className="p-4">
                         {r.default_price_per_person != null
-                          ? `${Number(r.default_price_per_person).toLocaleString("ru")} ₽`
+                          ? `${Number(r.default_price_per_person).toLocaleString("ru")} BYN`
                           : "—"}
                       </td>
                       <td className="p-4 text-slate-400">{r.duration_hours ?? "—"}</td>
@@ -588,7 +588,7 @@ export default function RaftingPage() {
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Цена за сплав, ₽</label>
+                    <label className="block text-xs text-slate-500 mb-1">Цена за сплав, BYN</label>
                     <input
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
                       placeholder="0"
@@ -624,7 +624,7 @@ export default function RaftingPage() {
                       <th className="text-left p-4">ФИО</th>
                       <th className="text-left p-4">Телефон</th>
                       <th className="text-left p-4 min-w-[8rem]">Паспорт</th>
-                      <th className="text-left p-4 whitespace-nowrap">Цена / сплав, ₽</th>
+                      <th className="text-left p-4 whitespace-nowrap">Цена / сплав, BYN</th>
                       <th className="text-left p-4">Комментарий</th>
                       <th className="text-left p-4">Активен</th>
                     </tr>
@@ -881,7 +881,7 @@ export default function RaftingPage() {
               />
               <input
                 className="px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
-                placeholder="₽ с человека"
+                placeholder="BYN с человека"
                 inputMode="decimal"
                 title="Цена за одного участника (итог = гости × эта цена)"
                 value={tripForm.price_per_person}
@@ -955,14 +955,14 @@ export default function RaftingPage() {
                       <div className="text-slate-200">{t.guests_count} чел.</div>
                       <div className="text-slate-400 text-xs mt-0.5">
                         {t.price_per_person != null
-                          ? `${Number(t.price_per_person).toLocaleString("ru")} ₽/чел`
+                          ? `${Number(t.price_per_person).toLocaleString("ru")} BYN/чел`
                           : t.trip_price != null && t.guests_count >= 1
-                            ? `${(Math.round((Number(t.trip_price) / t.guests_count) * 100) / 100)} ₽/чел`
+                            ? `${(Math.round((Number(t.trip_price) / t.guests_count) * 100) / 100)} BYN/чел`
                             : "—"}
                       </div>
                       <div className="text-slate-500 text-xs">
                         {t.trip_price != null
-                          ? `Всего ${Number(t.trip_price).toLocaleString("ru")} ₽`
+                          ? `Всего ${Number(t.trip_price).toLocaleString("ru")} BYN`
                           : ""}
                       </div>
                       <div className="text-slate-500 text-xs mt-0.5">
@@ -999,7 +999,7 @@ export default function RaftingPage() {
                       </div>
                     </td>
                     <td className="p-3">
-                      {t.instructor_fee != null ? `${Number(t.instructor_fee).toLocaleString("ru")} ₽` : "—"}
+                      {t.instructor_fee != null ? `${Number(t.instructor_fee).toLocaleString("ru")} BYN` : "—"}
                       {t.instructor_paid ? <span className="text-xs text-emerald-400 ml-1">выплачено</span> : null}
                     </td>
                     <td className="p-3 font-mono text-xs">
@@ -1079,7 +1079,7 @@ export default function RaftingPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Цена с человека, ₽</label>
+                    <label className="block text-xs text-slate-500 mb-1">Цена с человека, BYN</label>
                     <input
                       className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
                       inputMode="decimal"

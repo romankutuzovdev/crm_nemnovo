@@ -28,6 +28,9 @@ class Deal(Base):
         GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     service_type: Mapped[str] = mapped_column(String(50), default=ServiceType.RAFTING, nullable=False)
+    tour_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tour_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tour_status: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(30), default=DealStatus.NEW, nullable=False, index=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)

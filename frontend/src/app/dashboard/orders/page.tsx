@@ -276,7 +276,7 @@ export default function OrdersPage() {
                   </td>
                   <td className="p-4">{ORDER_STATUS_LABELS[o.status] ?? o.status}</td>
                   <td className="p-4 text-sm">{PAYMENT_STATUS_LABELS[o.payment_status] ?? o.payment_status}</td>
-                  <td className="p-4">{Number(o.total_amount).toLocaleString("ru")} ₽</td>
+                  <td className="p-4">{Number(o.total_amount).toLocaleString("ru")} BYN</td>
                 </tr>
               ))}
             </tbody>

@@ -166,15 +166,15 @@ export default function PaymentsPage() {
               </span>
               <span>
                 <span className="text-slate-500">Сумма:</span>{" "}
-                {Number(orderPreview.total_amount).toLocaleString("ru")} ₽
+                {Number(orderPreview.total_amount).toLocaleString("ru")} BYN
               </span>
               <span>
                 <span className="text-slate-500">Оплачено:</span>{" "}
-                {Number(orderPreview.paid_amount).toLocaleString("ru")} ₽
+                {Number(orderPreview.paid_amount).toLocaleString("ru")} BYN
               </span>
               <span>
                 <span className="text-slate-500">Долг:</span>{" "}
-                {Number(orderPreview.debt_amount).toLocaleString("ru")} ₽
+                {Number(orderPreview.debt_amount).toLocaleString("ru")} BYN
               </span>
               <span className="text-slate-400">({orderPreview.payment_status})</span>
             </div>
@@ -266,7 +266,7 @@ export default function PaymentsPage() {
                   <td className="p-4">
                     {p.paid_at ? new Date(p.paid_at).toLocaleString("ru") : "—"}
                   </td>
-                  <td className="p-4">{Number(p.amount).toLocaleString("ru")} ₽</td>
+                  <td className="p-4">{Number(p.amount).toLocaleString("ru")} BYN</td>
                   <td className="p-4">{methodLabel(p.method)}</td>
                   <td className="p-4">{p.status}</td>
                   <td className="p-4">{p.notes ?? "—"}</td>

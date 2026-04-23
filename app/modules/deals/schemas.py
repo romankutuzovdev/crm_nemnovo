@@ -75,6 +75,9 @@ class DealCreate(BaseSchema):
     client_id: UUID
     lead_id: UUID | None = None
     service_type: ServiceType
+    tour_title: str | None = None
+    tour_type: str | None = None
+    tour_status: str | None = None
     start_date: date
     end_date: date
     guests_count: int = 1
@@ -89,6 +92,9 @@ class DealUpdate(BaseSchema):
     status: DealStatus | None = None
     assigned_to: UUID | None = None
     notes: str | None = None
+    tour_title: str | None = None
+    tour_type: str | None = None
+    tour_status: str | None = None
     start_date: date | None = None
     end_date: date | None = None
     guests_count: int | None = None
@@ -104,6 +110,9 @@ class DealResponse(UUIDSchema):
     assigned_to: UUID | None
     assigned_user_name: str | None = None
     service_type: str
+    tour_title: str | None = None
+    tour_type: str | None = None
+    tour_status: str | None = None
     status: str
     start_date: date
     end_date: date

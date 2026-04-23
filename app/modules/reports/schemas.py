@@ -34,6 +34,32 @@ class MonthlyKpiPoint(BaseSchema):
     revenue_confirmed: float = Field(
         description="Сумма подтверждённых платежей (по paid_at) за месяц"
     )
+    expenses_known: float = Field(
+        description="Известные расходы за месяц (экскурсии + выплаты инструкторам)"
+    )
+    profit_estimated: float = Field(
+        description="Оценка прибыли за месяц: revenue_confirmed - expenses_known"
+    )
+
+
+class DailyFinancePoint(BaseSchema):
+    day: date
+    inflow_confirmed: float = 0
+    expenses_known: float = 0
+    profit_estimated: float = 0
+
+
+class TopClientPoint(BaseSchema):
+    client_id: str
+    client_name: str
+    revenue_confirmed: float
+
+
+class TopServiceProfitPoint(BaseSchema):
+    service_type: str
+    revenue_confirmed: float
+    expenses_known: float
+    profit_estimated: float
 
 
 class ReportsAnalyticsResponse(BaseSchema):
@@ -41,7 +67,15 @@ class ReportsAnalyticsResponse(BaseSchema):
     period_end: date
     total_bookings: int
     total_revenue_confirmed: float
+    total_expenses_known: float
+    total_profit_estimated: float
+    avg_check_confirmed: float
+    payments_count_confirmed: int
+    outstanding_debt_snapshot: float
     monthly: list[MonthlyKpiPoint]
+    daily: list[DailyFinancePoint]
+    top_clients: list[TopClientPoint]
+    top_services: list[TopServiceProfitPoint]
 
 
 class LeadsBreakdownPoint(BaseSchema):

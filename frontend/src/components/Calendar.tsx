@@ -67,10 +67,12 @@ interface ParticipantLineForm {
 }
 
 interface SlotLineForm {
+  participant_idx: number;
   asset_id: string;
   start_datetime: string;
   end_datetime: string;
   quantity: number;
+  unit_price: number;
 }
 
 interface HostelRoom {
@@ -150,6 +152,9 @@ interface LeadDetail {
   preferred_datetime?: string | null;
   service_type: string | null;
   guests_count: number;
+  client_id?: string | null;
+  excursion_guide_id?: string | null;
+  raw_payload?: Record<string, unknown> | null;
 }
 
 interface RaftingTripDetail {
@@ -309,13 +314,14 @@ export default function Calendar() {
   const [addDate, setAddDate] = useState<{ start: string; end: string } | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [guestsCount, setGuestsCount] = useState(1);
+  const [guestsCount, setGuestsCount] = useState("1");
+  const [editingCalendarLeadId, setEditingCalendarLeadId] = useState<string | null>(null);
+  const [eventTitle, setEventTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [newContractId, setNewContractId] = useState("");
   const [newContractQuery, setNewContractQuery] = useState("");
   const [newContractSuggestions, setNewContractSuggestions] = useState<ContractRow[]>([]);
   const [newContractMenuOpen, setNewContractMenuOpen] = useState(false);
-  const [newContractText, setNewContractText] = useState("");
   const newContractSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dealContractId, setDealContractId] = useState("");
   const [dealContractQuery, setDealContractQuery] = useState("");
@@ -400,14 +406,15 @@ export default function Calendar() {
   const calendarRef = useRef<FullCalendar>(null);
 
   const initEventForm = useCallback((startIso: string, endIso: string) => {
-    setGuestsCount(1);
+    setGuestsCount("1");
+    setEditingCalendarLeadId(null);
+    setEventTitle("");
     setNotes("");
     setNewExcursionGuideId("");
     setNewContractId("");
     setNewContractQuery("");
     setNewContractSuggestions([]);
     setNewContractMenuOpen(false);
-    setNewContractText("");
     setParticipantLines([
       {
         clientMode: "existing",
@@ -425,7 +432,16 @@ export default function Calendar() {
         total_price: 0,
       },
     ]);
-    setSlotLines([{ asset_id: "", start_datetime: startIso, end_datetime: endIso, quantity: 1 }]);
+    setSlotLines([
+      {
+        participant_idx: 0,
+        asset_id: "",
+        start_datetime: startIso,
+        end_datetime: endIso,
+        quantity: 1,
+        unit_price: 0,
+      },
+    ]);
   }, []);
 
   const fetchContractSuggestions = useCallback(
@@ -1033,21 +1049,160 @@ export default function Calendar() {
     }
   };
 
+  const openLeadInCalendarForm = async (leadId: string, fallbackStart?: string, fallbackEnd?: string) => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const lead = await apiFetch<LeadDetail>(`/leads/${leadId}`, { token });
+      const raw = (lead.raw_payload ?? {}) as Record<string, unknown>;
+      const rawParticipants = Array.isArray(raw.participants) ? raw.participants : [];
+      const rawSlots = Array.isArray(raw.slots) ? raw.slots : [];
+      const normalizeText = (v: unknown) => String(v ?? "").trim().toLowerCase();
+      const resolveCatalogItemId = (
+        serviceType: ParticipantLineForm["service_type"],
+        description: string,
+        unitPrice: number
+      ) => {
+        const options = getCatalogOptionsByType(serviceType);
+        if (!options.length) return "";
+        const desc = normalizeText(description);
+        const exact = options.find((o) => normalizeText(o.description) === desc);
+        if (exact) return exact.id;
+        const byLabel = options.find((o) => normalizeText(o.label).includes(desc) || desc.includes(normalizeText(o.label)));
+        if (byLabel) return byLabel.id;
+        const byPrice = options.find((o) => Number(o.unit_price ?? 0) === Number(unitPrice ?? 0));
+        return byPrice?.id ?? "";
+      };
+
+      const participantRows: ParticipantLineForm[] =
+        rawParticipants.length > 0
+          ? rawParticipants.map((p) => {
+              const row = (p ?? {}) as Record<string, any>;
+              const svc = (row.service ?? {}) as Record<string, any>;
+              const newClient = (row.new_client ?? null) as Record<string, any> | null;
+              const quantity = Math.max(1, Number(svc.quantity ?? 1) || 1);
+              const unit = Number(svc.unit_price ?? 0) || 0;
+              const serviceType = String(svc.service_type ?? lead.service_type ?? "rafting");
+              const serviceDescription = String(svc.description ?? "Услуга");
+              return {
+                clientMode: newClient ? "new" : "existing",
+                client_id: newClient ? "" : String(row.client_id ?? lead.client_id ?? ""),
+                new_first_name: newClient ? String(newClient.first_name ?? "") : "",
+                new_last_name: newClient ? String(newClient.last_name ?? "") : "",
+                new_phone: newClient ? String(newClient.phone ?? "") : "",
+                new_email: newClient ? String(newClient.email ?? "") : "",
+                service_type: (serviceType as ParticipantLineForm["service_type"]) ?? "rafting",
+                catalog_item_id: resolveCatalogItemId(
+                  (serviceType as ParticipantLineForm["service_type"]) ?? "rafting",
+                  serviceDescription,
+                  unit
+                ),
+                excursion_guide_id: String(lead.excursion_guide_id ?? ""),
+                description: serviceDescription,
+                quantity,
+                unit_price: unit,
+                total_price: quantity * unit,
+              };
+            })
+          : [
+              {
+                clientMode: "existing",
+                client_id: String(lead.client_id ?? ""),
+                new_first_name: "",
+                new_last_name: "",
+                new_phone: "",
+                new_email: "",
+                service_type: ((lead.service_type ?? "rafting") as ParticipantLineForm["service_type"]) ?? "rafting",
+                catalog_item_id: "",
+                excursion_guide_id: String(lead.excursion_guide_id ?? ""),
+                description: "Услуга",
+                quantity: 1,
+                unit_price: 0,
+                total_price: 0,
+              },
+            ];
+
+      const computedStart =
+        (rawSlots[0] as Record<string, any> | undefined)?.start_datetime ??
+        lead.preferred_datetime ??
+        fallbackStart ??
+        new Date().toISOString();
+      const computedEnd =
+        (rawSlots[0] as Record<string, any> | undefined)?.end_datetime ??
+        fallbackEnd ??
+        new Date(new Date(computedStart).getTime() + 60 * 60 * 1000).toISOString();
+
+      const toLocalInput = (v: string) => {
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return "";
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mi = String(d.getMinutes()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+      };
+
+      const slotRows: SlotLineForm[] =
+        rawSlots.length > 0
+          ? rawSlots.map((s) => {
+              const row = (s ?? {}) as Record<string, any>;
+              return {
+                participant_idx: Math.max(0, Number(row.participant_idx ?? 0) || 0),
+                asset_id: String(row.asset_id ?? ""),
+                start_datetime: toLocalInput(String(row.start_datetime ?? computedStart)),
+                end_datetime: toLocalInput(String(row.end_datetime ?? computedEnd)),
+                quantity: Math.max(1, Number(row.quantity ?? 1) || 1),
+                unit_price: Number(row.unit_price ?? 0) || 0,
+              };
+            })
+          : [];
+
+      setEditingCalendarLeadId(leadId);
+      setEventTitle(String(raw.title ?? ""));
+      setNotes(String(raw.notes ?? ""));
+      setNewContractId(String(raw.contract_id ?? ""));
+      setNewContractQuery("");
+      setNewContractSuggestions([]);
+      setNewContractMenuOpen(false);
+      setNewExcursionGuideId(String(raw.excursion_guide_id ?? lead.excursion_guide_id ?? ""));
+      setParticipantLines(participantRows);
+      setSlotLines(slotRows);
+      setGuestsCount(String(Math.max(1, Number(lead.guests_count ?? 1) || 1)));
+      setAddDate({
+        start: toLocalInput(String(computedStart)),
+        end: toLocalInput(String(computedEnd)),
+      });
+      setSelectedEvent(null);
+      setShowAddModal(true);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Не удалось открыть заявку для редактирования");
+    }
+  };
+
   const handleDatesSet = (info: DatesSetArg) => {
     setDateRange({ start: info.start, end: info.end });
   };
 
   const handleDateClick = (info: { dateStr: string }) => {
+    const toLocalInput = (d: Date) => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mi = String(d.getMinutes()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    };
     const d = new Date(info.dateStr);
     const start = new Date(d);
     start.setHours(9, 0, 0, 0);
     const end = new Date(d);
     end.setHours(10, 0, 0, 0);
     setAddDate({
-      start: start.toISOString().slice(0, 16),
-      end: end.toISOString().slice(0, 16),
+      start: toLocalInput(start),
+      end: toLocalInput(end),
     });
-    initEventForm(start.toISOString().slice(0, 16), end.toISOString().slice(0, 16));
+    initEventForm(toLocalInput(start), toLocalInput(end));
     setShowAddModal(true);
   };
 
@@ -1157,13 +1312,13 @@ export default function Calendar() {
   const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!addDate || participantLines.length === 0) return;
-    if (guestsCount < participantLines.length) {
-      alert(
-        `Гостей (всего) не может быть меньше количества участников (${participantLines.length}).`
-      );
-      setGuestsCount(participantLines.length);
-      return;
-    }
+    const parsedGuests = Math.max(
+      1,
+      participantLines.reduce((sum, line) => {
+        const q = Math.floor(Number(line.quantity) || 0);
+        return sum + Math.max(1, q);
+      }, 0)
+    );
     for (const line of participantLines) {
       if (line.clientMode === "existing" && !line.client_id) {
         alert("Выберите клиента для каждого участника или укажите нового клиента.");
@@ -1191,17 +1346,22 @@ export default function Calendar() {
       alert("Заполните выбранный слот полностью или удалите его.");
       return;
     }
+    const toApiLocalIso = (value: string) => {
+      const trimmed = String(value ?? "").trim();
+      if (!trimmed) return null;
+      return trimmed.length === 16 ? `${trimmed}:00` : trimmed;
+    };
     try {
-      await apiFetch("/calendar/events/multi", {
-        method: "POST",
+      await apiFetch(editingCalendarLeadId ? `/calendar/events/multi/${editingCalendarLeadId}` : "/calendar/events/multi", {
+        method: editingCalendarLeadId ? "PATCH" : "POST",
         token: getToken() ?? undefined,
         body: JSON.stringify({
-          guests_count: Math.max(guestsCount, participantLines.length),
+          title: eventTitle.trim() ? eventTitle.trim() : null,
+          guests_count: parsedGuests,
           notes: notes || null,
           contract_id: newContractId.trim() ? newContractId.trim() : null,
-          contract_text: newContractText.trim() ? newContractText.trim() : null,
           excursion_guide_id: newExcursionGuideId.trim() ? newExcursionGuideId.trim() : null,
-          preferred_datetime: new Date(addDate.start).toISOString(),
+          preferred_datetime: toApiLocalIso(addDate.start),
           participants: participantLines.map((line) => {
             const service = {
               service_type: line.service_type,
@@ -1221,18 +1381,23 @@ export default function Calendar() {
             }
             return { client_id: line.client_id, service };
           }),
-          slots: anySlotFilled ? slotLines
-            .filter((line) => line.asset_id && line.start_datetime && line.end_datetime)
-            .map((line) => ({
-              asset_id: line.asset_id,
-              start_datetime: new Date(line.start_datetime).toISOString(),
-              end_datetime: new Date(line.end_datetime).toISOString(),
-              quantity: line.quantity,
-            })) : [],
+          slots: anySlotFilled
+            ? slotLines
+                .filter((line) => line.asset_id && line.start_datetime && line.end_datetime)
+                .map((line) => ({
+                  participant_idx: Number.isFinite(line.participant_idx) ? line.participant_idx : 0,
+                  asset_id: line.asset_id,
+                  start_datetime: toApiLocalIso(line.start_datetime),
+                  end_datetime: toApiLocalIso(line.end_datetime),
+                  quantity: line.quantity,
+                  unit_price: Number.isFinite(line.unit_price) ? line.unit_price : 0,
+                }))
+            : [],
         }),
       });
       setShowAddModal(false);
       setAddDate(null);
+      setEditingCalendarLeadId(null);
       await refreshClients();
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       if (dateRange) fetchEvents(dateRange.start, dateRange.end);
@@ -1240,6 +1405,14 @@ export default function Calendar() {
       alert(err instanceof Error ? err.message : "Ошибка создания");
     }
   };
+
+  useEffect(() => {
+    const totalGuests = participantLines.reduce((sum, line) => {
+      const q = Math.floor(Number(line.quantity) || 0);
+      return sum + Math.max(1, q);
+    }, 0);
+    setGuestsCount(String(Math.max(1, totalGuests)));
+  }, [participantLines]);
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -1411,6 +1584,14 @@ export default function Calendar() {
             const ext = info.event.extendedProps as Record<string, unknown>;
             const dealRaw = ext.deal_id;
             const leadRaw = ext.lead_id;
+            if (String(ext.event_type ?? "") === "lead" && leadRaw != null) {
+              void openLeadInCalendarForm(
+                String(leadRaw),
+                info.event.start?.toISOString(),
+                info.event.end?.toISOString()
+              );
+              return;
+            }
             const extNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
             const extStr = (v: unknown) => (v != null && String(v).length ? String(v) : undefined);
             setSelectedEvent({
@@ -1441,7 +1622,9 @@ export default function Calendar() {
       {showAddModal && addDate && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-black text-slate-900 dark:text-slate-100 rounded-xl p-6 w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-xl max-h-[90vh] overflow-auto">
-            <h2 className="text-lg font-semibold mb-4">Новая заявка (мероприятие)</h2>
+            <h2 className="text-lg font-semibold mb-4">
+              {editingCalendarLeadId ? "Редактирование заявки (мероприятие)" : "Новая заявка (мероприятие)"}
+            </h2>
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -1452,18 +1635,33 @@ export default function Calendar() {
                     type="number"
                     min={1}
                     value={guestsCount}
-                    onChange={(e) => setGuestsCount(Number(e.target.value || 1))}
+                    readOnly
                     className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   />
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Формируется автоматически по числу участников в блоке ниже.
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Комментарий</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                    Название мероприятия
+                  </label>
                   <input
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                    value={eventTitle}
+                    onChange={(e) => setEventTitle(e.target.value)}
+                    placeholder="Например: Корпоратив, День рождения, Сборный сплав…"
                     className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Комментарий</label>
+                <input
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                />
               </div>
 
               <div className="space-y-3">
@@ -1515,18 +1713,6 @@ export default function Calendar() {
                       ))}
                     </ul>
                   )}
-                </div>
-                <div>
-                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
-                    Текст по договору (произвольно, без привязки к справочнику)
-                  </label>
-                  <textarea
-                    value={newContractText}
-                    onChange={(e) => setNewContractText(e.target.value)}
-                    rows={2}
-                    placeholder="Реквизиты, примечание к договору…"
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-sm"
-                  />
                 </div>
               </div>
 
@@ -1660,86 +1846,83 @@ export default function Calendar() {
                       </div>
                     )}
                     <div className="grid grid-cols-12 gap-2">
-                      <select
-                        value={line.service_type}
-                        onChange={(e) =>
-                          setParticipantLines((prev) => {
-                            const nextType = e.target.value as ParticipantLineForm["service_type"];
-                            const first = getCatalogOptionsByType(nextType)[0];
-                            return prev.map((row, i) =>
-                              i === idx
-                                ? {
-                                    ...row,
-                                    service_type: nextType,
-                                    catalog_item_id: first?.id ?? "",
-                                    excursion_guide_id:
-                                      nextType === "excursion"
-                                        ? (newExcursionGuideId.trim() || row.excursion_guide_id)
-                                        : "",
-                                    description: first?.description ?? row.description,
-                                    unit_price: first?.unit_price ?? row.unit_price,
-                                    total_price:
-                                      Number(row.quantity ?? 1) * Number(first?.unit_price ?? row.unit_price ?? 0),
-                                  }
-                                : row
-                            );
-                          })
-                        }
-                        className="col-span-12 sm:col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                      >
-                        <option value="rafting">Сплав</option>
-                        <option value="hostel">Хостел</option>
-                        <option value="rent">Аренда</option>
-                        <option value="excursion">Экскурсия</option>
-                        <option value="combined">Комбо</option>
-                      </select>
-                      <select
-                        value={line.catalog_item_id}
-                        onChange={(e) =>
-                          setParticipantLines((prev) => {
-                            const selectedId = e.target.value;
-                            return prev.map((row, i) => {
-                              if (i !== idx) return row;
-                              const selected = getCatalogOptionsByType(row.service_type).find(
-                                (item) => item.id === selectedId
+                      <div className="col-span-12 sm:col-span-3">
+                        <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
+                          Тип услуги
+                        </label>
+                        <select
+                          value={line.service_type}
+                          onChange={(e) =>
+                            setParticipantLines((prev) => {
+                              const nextType = e.target.value as ParticipantLineForm["service_type"];
+                              const first = getCatalogOptionsByType(nextType)[0];
+                              return prev.map((row, i) =>
+                                i === idx
+                                  ? {
+                                      ...row,
+                                      service_type: nextType,
+                                      catalog_item_id: first?.id ?? "",
+                                      excursion_guide_id:
+                                        nextType === "excursion"
+                                          ? (newExcursionGuideId.trim() || row.excursion_guide_id)
+                                          : "",
+                                      description: first?.description ?? row.description,
+                                      unit_price: first?.unit_price ?? row.unit_price,
+                                      total_price:
+                                        Number(row.quantity ?? 1) * Number(first?.unit_price ?? row.unit_price ?? 0),
+                                    }
+                                  : row
                               );
-                              return {
-                                ...row,
-                                catalog_item_id: selectedId,
-                                description: selected?.description ?? row.description,
-                                unit_price: selected?.unit_price ?? row.unit_price,
-                                total_price:
-                                  Number(row.quantity ?? 1) * Number(selected?.unit_price ?? row.unit_price ?? 0),
-                              };
-                            });
-                          })
-                        }
-                        className={`col-span-12 sm:col-span-4 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 ${
-                          line.service_type === "excursion" ? "sm:col-span-3" : ""
-                        }`}
-                      >
-                        <option value="">Выберите услугу...</option>
-                        {getCatalogOptionsByType(line.service_type).map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {line.service_type === "combined"
-                              ? `${option.service_type === "rafting" ? "Сплав" : option.service_type === "hostel" ? "Хостел" : "Аренда"}: ${option.label}`
-                              : option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        value={line.description}
-                        onChange={(e) =>
-                          setParticipantLines((prev) =>
-                            prev.map((row, i) => (i === idx ? { ...row, description: e.target.value } : row))
-                          )
-                        }
-                        className={`col-span-12 sm:col-span-5 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 ${
-                          line.service_type === "excursion" ? "sm:col-span-3" : ""
-                        }`}
-                      />
+                            })
+                          }
+                          className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        >
+                          <option value="rafting">Сплав</option>
+                          <option value="hostel">Хостел</option>
+                          <option value="rent">Аренда</option>
+                          <option value="excursion">Экскурсия</option>
+                          <option value="combined">Комбо</option>
+                        </select>
+                      </div>
+                      <div className={`col-span-12 ${line.service_type === "excursion" ? "sm:col-span-5" : "sm:col-span-9"}`}>
+                        <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
+                          Услуга участника
+                        </label>
+                        <select
+                          value={line.catalog_item_id}
+                          onChange={(e) =>
+                            setParticipantLines((prev) => {
+                              const selectedId = e.target.value;
+                              return prev.map((row, i) => {
+                                if (i !== idx) return row;
+                                const selected = getCatalogOptionsByType(row.service_type).find(
+                                  (item) => item.id === selectedId
+                                );
+                                return {
+                                  ...row,
+                                  catalog_item_id: selectedId,
+                                  description: selected?.description ?? row.description,
+                                  unit_price: selected?.unit_price ?? row.unit_price,
+                                  total_price:
+                                    Number(row.quantity ?? 1) * Number(selected?.unit_price ?? row.unit_price ?? 0),
+                                };
+                              });
+                            })
+                          }
+                          className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                        >
+                          <option value="">Выберите услугу...</option>
+                          {getCatalogOptionsByType(line.service_type).map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {line.service_type === "combined"
+                                ? `${option.service_type === "rafting" ? "Сплав" : option.service_type === "hostel" ? "Хостел" : "Аренда"}: ${option.label}`
+                                : option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       {line.service_type === "excursion" && (
-                        <div className="col-span-12 sm:col-span-3">
+                        <div className="col-span-12 sm:col-span-4">
                           <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
                             Экскурсовод
                           </label>
@@ -1802,7 +1985,7 @@ export default function Calendar() {
                       </div>
                       <div className="col-span-12 sm:col-span-4 md:col-span-3">
                         <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
-                          Цена за человека, ₽
+                          Цена за человека, BYN
                         </label>
                         <input
                           type="number"
@@ -1828,7 +2011,7 @@ export default function Calendar() {
                       </div>
                       <div className="col-span-12 sm:col-span-4 md:col-span-3">
                         <label className="block text-[11px] text-slate-600 dark:text-slate-400 mb-1">
-                          Общая цена, ₽
+                          Общая цена, BYN
                         </label>
                         <input
                           type="number"
@@ -1850,11 +2033,9 @@ export default function Calendar() {
                               })
                             );
                           }}
+                          title="Если изменить общую цену, цена за человека пересчитается автоматически"
                           className="w-full px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                         />
-                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                          Изменение общей цены автоматически пересчитает цену за человека.
-                        </div>
                       </div>
                       <button
                         type="button"
@@ -1867,6 +2048,9 @@ export default function Calendar() {
                       >
                         Удалить
                       </button>
+                      <div className="col-span-12 text-[11px] text-slate-500 dark:text-slate-400 -mt-1">
+                        Подсказка: изменение общей цены автоматически пересчитает цену за человека.
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1880,7 +2064,14 @@ export default function Calendar() {
                     onClick={() =>
                       setSlotLines((prev) => [
                         ...prev,
-                        { asset_id: "", start_datetime: addDate.start, end_datetime: addDate.end, quantity: 1 },
+                        {
+                          participant_idx: 0,
+                          asset_id: "",
+                          start_datetime: addDate.start,
+                          end_datetime: addDate.end,
+                          quantity: 1,
+                          unit_price: 0,
+                        },
                       ])
                     }
                     className="px-3 py-1 text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded"
@@ -1888,8 +2079,48 @@ export default function Calendar() {
                     + Слот
                   </button>
                 </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Слот = ресурс на время для участника. Поля справа:{" "}
+                  <span className="font-medium">Кол-во</span> и{" "}
+                  <span className="font-medium">Цена за 1 ед. (BYN)</span>.
+                </p>
+                <div className="hidden md:grid grid-cols-12 gap-2 text-[11px] text-slate-500 dark:text-slate-400 px-1">
+                  <div className="md:col-span-2">Участник</div>
+                  <div className="md:col-span-3">Ресурс</div>
+                  <div className="md:col-span-2">Начало</div>
+                  <div className="md:col-span-2">Окончание</div>
+                  <div className="md:col-span-1">Кол-во</div>
+                  <div className="md:col-span-1">Цена, BYN</div>
+                  <div className="md:col-span-1">Действие</div>
+                </div>
                 {slotLines.map((line, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                    <select
+                      value={String(line.participant_idx ?? 0)}
+                      onChange={(e) =>
+                        setSlotLines((prev) =>
+                          prev.map((row, i) =>
+                            i === idx ? { ...row, participant_idx: Math.max(0, Number(e.target.value || 0) || 0) } : row
+                          )
+                        )
+                      }
+                      className="col-span-12 md:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      title="Выберите участника (это не цена и не количество)"
+                    >
+                      {participantLines.map((p, pIdx) => {
+                        const label =
+                          p.clientMode === "new"
+                            ? `${p.new_first_name || "Новый"} ${p.new_last_name || "клиент"}${p.new_phone ? ` · ${p.new_phone}` : ""}`
+                            : p.client_id
+                              ? `Клиент ${p.client_id.slice(0, 8)}…`
+                              : `Участник ${pIdx + 1} (индекс ${pIdx})`;
+                        return (
+                          <option key={pIdx} value={String(pIdx)}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
                     <select
                       value={line.asset_id}
                       onChange={(e) =>
@@ -1915,7 +2146,7 @@ export default function Calendar() {
                           prev.map((row, i) => (i === idx ? { ...row, start_datetime: e.target.value } : row))
                         )
                       }
-                      className="col-span-12 sm:col-span-6 md:col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      className="col-span-12 sm:col-span-6 md:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     />
                     <input
                       type="datetime-local"
@@ -1925,7 +2156,7 @@ export default function Calendar() {
                           prev.map((row, i) => (i === idx ? { ...row, end_datetime: e.target.value } : row))
                         )
                       }
-                      className="col-span-12 sm:col-span-6 md:col-span-3 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                      className="col-span-12 sm:col-span-6 md:col-span-2 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     />
                     <input
                       type="number"
@@ -1936,16 +2167,32 @@ export default function Calendar() {
                           prev.map((row, i) => (i === idx ? { ...row, quantity: Number(e.target.value || 1) } : row))
                         )
                       }
+                      placeholder="Кол-во"
+                      title="Количество единиц ресурса в этом слоте"
+                      className="col-span-6 sm:col-span-3 md:col-span-1 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={line.unit_price}
+                      onChange={(e) =>
+                        setSlotLines((prev) =>
+                          prev.map((row, i) =>
+                            i === idx ? { ...row, unit_price: Number(e.target.value || 0) } : row
+                          )
+                        )
+                      }
+                      placeholder="Цена (BYN)"
+                      title="Цена за 1 единицу ресурса в этом слоте"
                       className="col-span-6 sm:col-span-3 md:col-span-1 px-2 py-2 rounded bg-white dark:bg-black border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                     />
                     <button
                       type="button"
                       onClick={() =>
-                        setSlotLines((prev) =>
-                          prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)
-                        )
+                        setSlotLines((prev) => prev.filter((_, i) => i !== idx))
                       }
-                      className="col-span-6 sm:col-span-3 md:col-span-2 px-4 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 whitespace-nowrap"
+                      className="col-span-12 sm:col-span-3 md:col-span-1 w-full px-2 py-2 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 text-xs sm:text-sm text-red-700 dark:text-red-300 text-center"
                     >
                       Удалить
                     </button>
@@ -1957,13 +2204,14 @@ export default function Calendar() {
                   type="submit"
                   className="flex-1 py-2 bg-brandBlue-600 hover:bg-brandBlue-700 text-white rounded-lg font-medium"
                 >
-                  Создать
+                  {editingCalendarLeadId ? "Сохранить" : "Создать"}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddModal(false);
                     setAddDate(null);
+                    setEditingCalendarLeadId(null);
                   }}
                   className="px-4 py-2 bg-slate-600 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-lg"
                 >
@@ -2042,7 +2290,7 @@ export default function Calendar() {
                     <span className="text-slate-500 dark:text-slate-400">
                       {" "}
                       — {Number(selectedEvent.paid_amount).toLocaleString("ru")} /{" "}
-                      {Number(selectedEvent.total_amount).toLocaleString("ru")} ₽
+                      {Number(selectedEvent.total_amount).toLocaleString("ru")} BYN
                     </span>
                   )}
                 </p>
@@ -2069,16 +2317,16 @@ export default function Calendar() {
                       </span>
                     </p>
                     <p className="text-slate-600 dark:text-slate-300">
-                      Сумма: {Number(orderDetail.total_amount).toLocaleString("ru")} ₽ · Оплачено:{" "}
-                      {Number(orderDetail.paid_amount).toLocaleString("ru")} ₽ · Остаток:{" "}
-                      {Number(orderDetail.debt_amount).toLocaleString("ru")} ₽
+                      Сумма: {Number(orderDetail.total_amount).toLocaleString("ru")} BYN · Оплачено:{" "}
+                      {Number(orderDetail.paid_amount).toLocaleString("ru")} BYN · Остаток:{" "}
+                      {Number(orderDetail.debt_amount).toLocaleString("ru")} BYN
                     </p>
                     <div className="flex flex-col sm:flex-row gap-2 pt-2">
                       <input
                         type="number"
                         min={0}
                         step="0.01"
-                        placeholder={`Остаток ${Number(orderDetail.debt_amount).toLocaleString("ru")} ₽`}
+                        placeholder={`Остаток ${Number(orderDetail.debt_amount).toLocaleString("ru")} BYN`}
                         value={quickPayAmount}
                         onChange={(e) => setQuickPayAmount(e.target.value)}
                         className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 text-sm"
@@ -2557,7 +2805,7 @@ export default function Calendar() {
                         />
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 flex items-end">
-                        Итого сейчас: {Number(hostelBooking.total_amount ?? 0).toLocaleString("ru")} ₽
+                        Итого сейчас: {Number(hostelBooking.total_amount ?? 0).toLocaleString("ru")} BYN
                       </div>
                     </div>
                     <div>
@@ -2617,7 +2865,7 @@ export default function Calendar() {
                         />
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 flex items-end">
-                        Итого: {Number(rentOrder.total_amount ?? 0).toLocaleString("ru")} ₽
+                        Итого: {Number(rentOrder.total_amount ?? 0).toLocaleString("ru")} BYN
                       </div>
                     </div>
                     <div>

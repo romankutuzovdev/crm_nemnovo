@@ -253,7 +253,7 @@ export default function ReportsPage() {
             <FadeUp className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
               <div className="text-slate-400 text-sm">Выручка за период</div>
               <div className="text-2xl font-semibold text-brandBlue-300 mt-1">
-                {Number(data.revenue_in_period).toLocaleString("ru")} ₽
+                {Number(data.revenue_in_period).toLocaleString("ru")} BYN
               </div>
               <p className="text-xs text-slate-500 mt-2">
                 Сумма подтверждённых платежей по дате оплаты в выбранном диапазоне.
@@ -262,7 +262,7 @@ export default function ReportsPage() {
             <FadeUp className="rounded-xl border border-slate-700 bg-slate-900/40 p-4" delay={0.04}>
               <div className="text-slate-400 text-sm">Задолженность (сейчас)</div>
               <div className="text-2xl font-semibold text-amber-400 mt-1">
-                {Number(data.outstanding_debt).toLocaleString("ru")} ₽
+                {Number(data.outstanding_debt).toLocaleString("ru")} BYN
               </div>
               <p className="text-xs text-slate-500 mt-2">
                 По неотменённым заказам (не зависит от дат выше).
@@ -292,7 +292,7 @@ export default function ReportsPage() {
                       <tr key={row.method} className="border-t border-slate-700 hover:bg-slate-800/30">
                         <td className="p-3">{METHOD_LABELS[row.method] ?? row.method}</td>
                         <td className="p-3 text-right">
-                          {Number(row.amount).toLocaleString("ru")} ₽
+                          {Number(row.amount).toLocaleString("ru")} BYN
                         </td>
                       </tr>
                     ))
@@ -322,7 +322,7 @@ export default function ReportsPage() {
                       <tr key={row.service_type} className="border-t border-slate-700 hover:bg-slate-800/30">
                         <td className="p-3">{SERVICE_LABELS[row.service_type] ?? row.service_type}</td>
                         <td className="p-3 text-right">
-                          {Number(row.amount).toLocaleString("ru")} ₽
+                          {Number(row.amount).toLocaleString("ru")} BYN
                         </td>
                       </tr>
                     ))
@@ -405,7 +405,7 @@ export default function ReportsPage() {
             <div className="p-4 text-sm text-slate-600">
               Итого к выплате:{" "}
               <span className="font-semibold text-slate-900">
-                {Number(payoutsReport?.total_due ?? 0).toLocaleString("ru")} ₽
+                {Number(payoutsReport?.total_due ?? 0).toLocaleString("ru")} BYN
               </span>
             </div>
             <table className="w-full text-sm">
@@ -422,7 +422,7 @@ export default function ReportsPage() {
                     <td className="p-3 text-slate-900">{r.instructor_name}</td>
                     <td className="p-3 text-right font-mono">{r.trips_count}</td>
                     <td className="p-3 text-right font-mono">
-                      {Number(r.total_due).toLocaleString("ru")} ₽
+                      {Number(r.total_due).toLocaleString("ru")} BYN
                     </td>
                   </tr>
                 ))}

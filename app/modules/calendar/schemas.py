@@ -60,10 +60,12 @@ class CalendarMultiServiceLine(BaseSchema):
 
 
 class CalendarMultiSlotLine(BaseSchema):
+    participant_idx: int | None = None
     asset_id: UUID
     start_datetime: datetime
     end_datetime: datetime
     quantity: int = 1
+    unit_price: float = 0
 
     @model_validator(mode="after")
     def validate_slot_dates(self) -> "CalendarMultiSlotLine":
@@ -71,6 +73,8 @@ class CalendarMultiSlotLine(BaseSchema):
             raise ValueError("end_datetime должно быть позже start_datetime")
         if self.quantity < 1:
             raise ValueError("quantity должно быть >= 1")
+        if self.unit_price < 0:
+            raise ValueError("unit_price должно быть >= 0")
         return self
 
 
@@ -107,6 +111,7 @@ class CalendarEventParticipantLine(BaseSchema):
 class CalendarEventMultiCreate(BaseSchema):
     """Создание карточки мероприятия: участники с услугами и слоты."""
 
+    title: str | None = None
     guests_count: int = 1
     notes: str | None = None
     contract_id: UUID | None = None

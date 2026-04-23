@@ -367,7 +367,7 @@ export default function HostelPage() {
         <h1 className="text-2xl font-bold">Хостел</h1>
         <p className="text-slate-400 text-sm mt-1 max-w-3xl leading-snug">
           <strong className="font-medium text-slate-300">Номера</strong> — добавляйте и редактируйте в базе (код номера,
-          вместимость, ориентир <strong className="font-medium text-slate-300">₽ с человека за ночь</strong> для подстановки в
+          вместимость, ориентир <strong className="font-medium text-slate-300">BYN с человека за ночь</strong> для подстановки в
           бронь). <strong className="font-medium text-slate-300">Бронирование:</strong> выберите номер, даты, проживающих,
           <strong className="font-medium text-slate-300"> комментарий</strong>; сумма = люди × ночи × цена с человека за ночь — или
           введите <strong className="font-medium text-slate-300">итого за проживание</strong>, тогда цена с человека за ночь
@@ -428,7 +428,7 @@ export default function HostelPage() {
               />
               <input
                 className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                placeholder="₽ с человека / ночь (подсказка)"
+                placeholder="BYN с человека / ночь (подсказка)"
                 inputMode="decimal"
                 title="Подставляется в новое бронирование при выборе номера"
                 value={roomForm.base_price_per_night}
@@ -460,7 +460,7 @@ export default function HostelPage() {
                   <th className="text-left p-4">Название</th>
                   <th className="text-left p-4">Мест</th>
                   <th className="text-left p-4">Этаж</th>
-                  <th className="text-left p-4">₽/чел/ночь</th>
+                  <th className="text-left p-4">BYN/чел/ночь</th>
                   <th className="text-left p-4">Активен</th>
                   <th className="text-left p-4 w-24"></th>
                 </tr>
@@ -635,7 +635,7 @@ export default function HostelPage() {
               {!bookingPriceByTotal ? (
                 <input
                   className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                  placeholder="₽ с человека за ночь"
+                  placeholder="BYN с человека за ночь"
                   inputMode="decimal"
                   value={bookingForm.price_per_person_per_night}
                   onChange={(e) => setBookingForm((s) => ({ ...s, price_per_person_per_night: e.target.value }))}
@@ -643,7 +643,7 @@ export default function HostelPage() {
               ) : (
                 <input
                   className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-                  placeholder="Итого за всё проживание, ₽"
+                  placeholder="Итого за всё проживание, BYN"
                   inputMode="decimal"
                   value={bookingForm.total_for_stay}
                   onChange={(e) => setBookingForm((s) => ({ ...s, total_for_stay: e.target.value }))}
@@ -662,7 +662,7 @@ export default function HostelPage() {
               {derivedPricePerPerson != null && (
                 <>
                   {" "}
-                  · В бронь уйдёт <span className="text-slate-300">{derivedPricePerPerson.toLocaleString("ru")} ₽</span> с
+                  · В бронь уйдёт <span className="text-slate-300">{derivedPricePerPerson.toLocaleString("ru")} BYN</span> с
                   человека за ночь
                 </>
               )}
@@ -670,7 +670,7 @@ export default function HostelPage() {
                 <>
                   {" "}
                   · Сумма:{" "}
-                  <span className="text-slate-300">{bookingPreviewTotal.toLocaleString("ru")} ₽</span>
+                  <span className="text-slate-300">{bookingPreviewTotal.toLocaleString("ru")} BYN</span>
                   <span className="text-slate-500"> (= прожив. × ночи × цена с человека)</span>
                 </>
               )}
@@ -746,7 +746,7 @@ export default function HostelPage() {
                   <th className="text-left p-3">Выезд</th>
                   <th className="text-left p-3">Ночей</th>
                   <th className="text-left p-3">Прожив.</th>
-                  <th className="text-left p-3">₽/чел/ночь</th>
+                  <th className="text-left p-3">BYN/чел/ночь</th>
                   <th className="text-left p-3">Сумма</th>
                   <th className="text-left p-3 min-w-[8rem]">Комментарий</th>
                   <th className="text-left p-3">Статус</th>
@@ -764,7 +764,7 @@ export default function HostelPage() {
                     <td className="p-3 min-w-[7rem]">
                       <div className="text-slate-200">
                         {b.price_per_person_per_night != null
-                          ? `${Number(b.price_per_person_per_night).toLocaleString("ru")} ₽`
+                          ? `${Number(b.price_per_person_per_night).toLocaleString("ru")} BYN`
                           : "—"}
                       </div>
                       <button
@@ -782,7 +782,7 @@ export default function HostelPage() {
                         Изменить расчёт
                       </button>
                     </td>
-                    <td className="p-3">{Number(b.total_amount).toLocaleString("ru")} ₽</td>
+                    <td className="p-3">{Number(b.total_amount).toLocaleString("ru")} BYN</td>
                     <td className="p-3 text-slate-400 max-w-[12rem] whitespace-pre-wrap text-xs">
                       {b.notes?.trim() ? b.notes : "—"}
                     </td>
@@ -829,7 +829,7 @@ export default function HostelPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Цена с человека за ночь, ₽</label>
+                    <label className="block text-xs text-slate-500 mb-1">Цена с человека за ночь, BYN</label>
                     <input
                       className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
                       inputMode="decimal"
@@ -911,7 +911,7 @@ export default function HostelPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs text-slate-500 mb-1">₽ с человека за ночь (подсказка)</label>
+                <label className="block text-xs text-slate-500 mb-1">BYN с человека за ночь (подсказка)</label>
                 <input
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
                   inputMode="decimal"

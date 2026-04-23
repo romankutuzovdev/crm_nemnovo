@@ -10,6 +10,7 @@ class PaymentCreate(BaseSchema):
     amount: float
     method: PaymentMethod
     notes: str | None = None
+    allocations: list["PaymentAllocationCreate"] = []
 
 
 class PaymentResponse(UUIDSchema):
@@ -22,10 +23,38 @@ class PaymentResponse(UUIDSchema):
     confirmed_by: UUID | None
     notes: str | None
     created_at: datetime
+    allocations: list["PaymentAllocationResponse"] = []
 
 
 class PaymentConfirm(BaseSchema):
     payment_id: UUID
+
+
+class PaymentAllocationCreate(BaseSchema):
+    client_id: UUID
+    amount: float
+    comment: str | None = None
+
+
+class PaymentAllocationResponse(UUIDSchema):
+    payment_id: UUID
+    client_id: UUID
+    client_name: str | None = None
+    amount: float
+    comment: str | None
+    created_at: datetime
+
+
+class PaymentAllocationsUpdate(BaseSchema):
+    allocations: list[PaymentAllocationCreate]
+
+
+class OrderClientFinanceRow(BaseSchema):
+    client_id: UUID
+    client_name: str | None = None
+    charged_amount: float = 0
+    paid_amount: float = 0
+    debt_amount: float = 0
 
 
 class OnlinePaymentInitRequest(BaseSchema):

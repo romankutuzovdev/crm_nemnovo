@@ -42,6 +42,9 @@ interface Order {
   client_id: string;
   assigned_to: string | null;
   service_type: string;
+  tour_title?: string | null;
+  tour_type?: string | null;
+  tour_status?: string | null;
   status: string;
   start_date: string;
   end_date: string;
@@ -65,6 +68,31 @@ interface Payment {
   status: string;
   paid_at: string | null;
   notes: string | null;
+  allocations?: PaymentAllocation[];
+}
+
+interface PaymentAllocation {
+  id: string;
+  payment_id: string;
+  client_id: string;
+  client_name: string | null;
+  amount: number;
+  comment: string | null;
+  created_at: string;
+}
+
+interface OrderClientFinanceRow {
+  client_id: string;
+  client_name: string | null;
+  charged_amount: number;
+  paid_amount: number;
+  debt_amount: number;
+}
+
+interface PaymentAllocationDraftRow {
+  client_id: string;
+  amount: string;
+  comment: string;
 }
 
 interface OrderAuditEntry {
@@ -192,6 +220,9 @@ export default function OrderDetailsPage() {
   const [editStartDate, setEditStartDate] = useState("");
   const [editEndDate, setEditEndDate] = useState("");
   const [editGuestsCount, setEditGuestsCount] = useState("1");
+  const [editTourTitle, setEditTourTitle] = useState("");
+  const [editTourType, setEditTourType] = useState("");
+  const [editTourStatus, setEditTourStatus] = useState("");
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [bookingAssetId, setBookingAssetId] = useState("");
   const [showAllAssets, setShowAllAssets] = useState(false);
@@ -221,6 +252,8 @@ export default function OrderDetailsPage() {
   const [editItemKind, setEditItemKind] = useState<"primary" | "addon">("primary");
   const [editItemQty, setEditItemQty] = useState("1");
   const [editItemPrice, setEditItemPrice] = useState("0");
+  const [editingAllocPaymentId, setEditingAllocPaymentId] = useState<string | null>(null);
+  const [allocDraftRows, setAllocDraftRows] = useState<PaymentAllocationDraftRow[]>([]);
 
   const { data: order, isLoading, error, refetch } = useQuery({
     queryKey: ["order", orderId],
@@ -249,6 +282,11 @@ export default function OrderDetailsPage() {
   const { data: invoices, refetch: refetchInvoices } = useQuery({
     queryKey: ["invoices", orderId],
     queryFn: () => apiFetch<Invoice[]>(`/payments/order/${orderId}/invoices`, { token }),
+    enabled: !!token && !!orderId,
+  });
+  const { data: clientsFinance, refetch: refetchClientsFinance } = useQuery({
+    queryKey: ["order-clients-finance", orderId],
+    queryFn: () => apiFetch<OrderClientFinanceRow[]>(`/payments/order/${orderId}/clients-finance`, { token }),
     enabled: !!token && !!orderId,
   });
 
@@ -350,6 +388,28 @@ export default function OrderDetailsPage() {
     onSuccess: async () => {
       setPaymentNotes("");
       await Promise.all([refetchPayments(), refetch()]);
+    },
+  });
+
+  const updateAllocations = useMutation({
+    mutationFn: (vars: { paymentId: string; rows: PaymentAllocationDraftRow[] }) =>
+      apiFetch<Payment>(`/payments/${vars.paymentId}/allocations`, {
+        method: "PUT",
+        token,
+        body: JSON.stringify({
+          allocations: vars.rows
+            .map((r) => ({
+              client_id: r.client_id,
+              amount: Number(r.amount),
+              comment: r.comment.trim() ? r.comment.trim() : null,
+            }))
+            .filter((r) => r.client_id && Number.isFinite(r.amount) && r.amount > 0),
+        }),
+      }),
+    onSuccess: async () => {
+      setEditingAllocPaymentId(null);
+      setAllocDraftRows([]);
+      await Promise.all([refetchPayments(), refetchClientsFinance(), refetch()]);
     },
   });
 
@@ -517,6 +577,9 @@ export default function OrderDetailsPage() {
           start_date: editStartDate || undefined,
           end_date: editEndDate || undefined,
           guests_count: Math.max(1, parseInt(editGuestsCount, 10) || 1),
+          tour_title: editTourTitle.trim() ? editTourTitle.trim() : null,
+          tour_type: editTourType.trim() ? editTourType.trim() : null,
+          tour_status: editTourStatus.trim() ? editTourStatus.trim() : null,
         }),
       }),
     onSuccess: async () => {
@@ -613,6 +676,9 @@ export default function OrderDetailsPage() {
                     setEditStartDate(order.start_date?.slice(0, 10) ?? "");
                     setEditEndDate(order.end_date?.slice(0, 10) ?? "");
                     setEditGuestsCount(String(order.guests_count ?? 1));
+                    setEditTourTitle(order.tour_title ?? "");
+                    setEditTourType(order.tour_type ?? "");
+                    setEditTourStatus(order.tour_status ?? "");
                     setTab("details");
                   }
                   setIsEditing((v) => !v);
@@ -657,15 +723,15 @@ export default function OrderDetailsPage() {
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
               <div className="text-slate-400">Сумма</div>
-              <div className="font-semibold">{headerStats.total.toLocaleString("ru")} ₽</div>
+              <div className="font-semibold">{headerStats.total.toLocaleString("ru")} BYN</div>
             </div>
             <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
               <div className="text-slate-400">Оплачено</div>
-              <div className="font-semibold">{headerStats.paid.toLocaleString("ru")} ₽</div>
+              <div className="font-semibold">{headerStats.paid.toLocaleString("ru")} BYN</div>
             </div>
             <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
               <div className="text-slate-400">Остаток</div>
-              <div className="font-semibold">{headerStats.debt.toLocaleString("ru")} ₽</div>
+              <div className="font-semibold">{headerStats.debt.toLocaleString("ru")} BYN</div>
             </div>
             <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
               <div className="text-slate-400">Статусы</div>
@@ -706,6 +772,45 @@ export default function OrderDetailsPage() {
           <div>
             <span className="text-slate-400">Тип услуги:</span>{" "}
             {SERVICE_TYPE_LABELS[order.service_type] ?? order.service_type}
+          </div>
+          <div>
+            <span className="text-slate-400">Название тура:</span>{" "}
+            {isEditing ? (
+              <input
+                value={editTourTitle}
+                onChange={(e) => setEditTourTitle(e.target.value)}
+                className="ml-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                placeholder="Например: Тур в Беловежскую пущу"
+              />
+            ) : (
+              order.tour_title || "—"
+            )}
+          </div>
+          <div>
+            <span className="text-slate-400">Тип тура:</span>{" "}
+            {isEditing ? (
+              <input
+                value={editTourType}
+                onChange={(e) => setEditTourType(e.target.value)}
+                className="ml-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                placeholder="Школьный / корпоративный / индивидуальный"
+              />
+            ) : (
+              order.tour_type || "—"
+            )}
+          </div>
+          <div>
+            <span className="text-slate-400">Статус тура:</span>{" "}
+            {isEditing ? (
+              <input
+                value={editTourStatus}
+                onChange={(e) => setEditTourStatus(e.target.value)}
+                className="ml-2 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                placeholder="Набор / подтверждён / в работе"
+              />
+            ) : (
+              order.tour_status || "—"
+            )}
           </div>
           <div>
             <span className="text-slate-400">Статус:</span>{" "}
@@ -923,8 +1028,8 @@ export default function OrderDetailsPage() {
                         </td>
                         <td className="p-4">{it.description}</td>
                         <td className="p-4">{it.quantity}</td>
-                        <td className="p-4">{Number(it.unit_price).toLocaleString("ru")} ₽</td>
-                        <td className="p-4">{Number(it.total_price).toLocaleString("ru")} ₽</td>
+                        <td className="p-4">{Number(it.unit_price).toLocaleString("ru")} BYN</td>
+                        <td className="p-4">{Number(it.total_price).toLocaleString("ru")} BYN</td>
                         <td className="p-4 flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -1030,7 +1135,7 @@ export default function OrderDetailsPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Цена за ед., ₽</label>
+                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Цена за ед., BYN</label>
                       <input
                         type="number"
                         min={0}
@@ -1115,7 +1220,7 @@ export default function OrderDetailsPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Цена за ед., ₽</label>
+                      <label className="block text-slate-700 dark:text-slate-400 mb-1">Цена за ед., BYN</label>
                       <input
                         type="number"
                         min={0}
@@ -1445,7 +1550,7 @@ export default function OrderDetailsPage() {
                     <tr key={i.id} className="border-t border-slate-700">
                       <td className="p-3">{new Date(i.created_at).toLocaleString("ru")}</td>
                       <td className="p-3">{i.issuer_company_name ?? "—"}</td>
-                      <td className="p-3">{Number(i.amount).toLocaleString("ru")} ₽</td>
+                      <td className="p-3">{Number(i.amount).toLocaleString("ru")} BYN</td>
                       <td className="p-3">{i.due_date}</td>
                       <td className="p-3">{INVOICE_STATUS_LABELS[i.status] ?? i.status}</td>
                     </tr>
@@ -1461,6 +1566,37 @@ export default function OrderDetailsPage() {
           </div>
 
           <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
+            <h3 className="font-medium mb-3">Финансы по клиентам</h3>
+            <div className="rounded-lg border border-slate-700 overflow-hidden mb-4">
+              <table className="w-full">
+                <thead className="bg-slate-800/50">
+                  <tr>
+                    <th className="text-left p-3">Клиент</th>
+                    <th className="text-left p-3">Начислено</th>
+                    <th className="text-left p-3">Оплачено</th>
+                    <th className="text-left p-3">Долг</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(clientsFinance ?? []).map((r) => (
+                    <tr key={r.client_id} className="border-t border-slate-700">
+                      <td className="p-3">{r.client_name ?? r.client_id}</td>
+                      <td className="p-3">{Number(r.charged_amount).toLocaleString("ru")} BYN</td>
+                      <td className="p-3">{Number(r.paid_amount).toLocaleString("ru")} BYN</td>
+                      <td className="p-3">{Number(r.debt_amount).toLocaleString("ru")} BYN</td>
+                    </tr>
+                  ))}
+                  {(!clientsFinance || clientsFinance.length === 0) && (
+                    <tr className="border-t border-slate-700">
+                      <td className="p-3 text-slate-500" colSpan={4}>
+                        Пока нет разбивки по клиентам.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
             <div className="grid gap-3 md:grid-cols-4">
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Сумма</label>
@@ -1534,26 +1670,142 @@ export default function OrderDetailsPage() {
               </thead>
               <tbody>
                 {(payments ?? []).map((p) => (
-                  <tr key={p.id} className="border-t border-slate-700">
-                    <td className="p-4">
+                  <Fragment key={p.id}>
+                  <tr className="border-t border-slate-700">
+                    <td className="p-4 align-top">
                       {p.paid_at ? new Date(p.paid_at).toLocaleString("ru") : "—"}
                     </td>
-                    <td className="p-4">{Number(p.amount).toLocaleString("ru")} ₽</td>
-                    <td className="p-4">{PAYMENT_METHOD_LABELS[p.method] ?? p.method}</td>
-                    <td className="p-4">{PAYMENT_TX_STATUS_LABELS[p.status] ?? p.status}</td>
-                    <td className="p-4">{p.notes ?? "—"}</td>
-                    <td className="p-4">
-                      <button
-                        onClick={() => {
-                          if (confirm("Оформить возврат этого платежа?")) refundPayment.mutate(p.id);
-                        }}
-                        disabled={refundPayment.isPending || p.status !== "confirmed"}
-                        className="px-3 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-500 disabled:opacity-50 text-sm"
-                      >
-                        {refundPayment.isPending ? "..." : "Возврат"}
-                      </button>
+                    <td className="p-4 align-top">{Number(p.amount).toLocaleString("ru")} BYN</td>
+                    <td className="p-4 align-top">{PAYMENT_METHOD_LABELS[p.method] ?? p.method}</td>
+                    <td className="p-4 align-top">{PAYMENT_TX_STATUS_LABELS[p.status] ?? p.status}</td>
+                    <td className="p-4 align-top">
+                      <div>{p.notes ?? "—"}</div>
+                      <div className="text-xs text-slate-400 mt-2">
+                        Распределение:{" "}
+                        {(p.allocations ?? []).length
+                          ? (p.allocations ?? [])
+                              .map((a) => `${a.client_name ?? a.client_id}: ${Number(a.amount).toLocaleString("ru")} BYN`)
+                              .join(" · ")
+                          : "не задано"}
+                      </div>
+                    </td>
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col items-start gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingAllocPaymentId(p.id);
+                            setAllocDraftRows(
+                              (p.allocations ?? []).map((a) => ({
+                                client_id: a.client_id,
+                                amount: String(a.amount ?? ""),
+                                comment: a.comment ?? "",
+                              }))
+                            );
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm"
+                        >
+                          Разнести
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm("Оформить возврат этого платежа?")) refundPayment.mutate(p.id);
+                          }}
+                          disabled={refundPayment.isPending || p.status !== "confirmed"}
+                          className="px-3 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-500 disabled:opacity-50 text-sm"
+                        >
+                          {refundPayment.isPending ? "..." : "Возврат"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
+                  {editingAllocPaymentId === p.id && (
+                    <tr className="border-t border-slate-700 bg-slate-900/40">
+                      <td className="p-4" colSpan={6}>
+                        <div className="space-y-2">
+                          {(allocDraftRows ?? []).map((row, idx) => (
+                            <div className="grid md:grid-cols-12 gap-2" key={`${idx}-${row.client_id}`}>
+                              <select
+                                value={row.client_id}
+                                onChange={(e) =>
+                                  setAllocDraftRows((prev) =>
+                                    prev.map((r, i) => (i === idx ? { ...r, client_id: e.target.value } : r))
+                                  )
+                                }
+                                className="md:col-span-5 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                              >
+                                <option value="">Клиент...</option>
+                                {clientChoices.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                value={row.amount}
+                                onChange={(e) =>
+                                  setAllocDraftRows((prev) =>
+                                    prev.map((r, i) => (i === idx ? { ...r, amount: e.target.value } : r))
+                                  )
+                                }
+                                placeholder="Сумма"
+                                className="md:col-span-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                              />
+                              <input
+                                value={row.comment}
+                                onChange={(e) =>
+                                  setAllocDraftRows((prev) =>
+                                    prev.map((r, i) => (i === idx ? { ...r, comment: e.target.value } : r))
+                                  )
+                                }
+                                placeholder="Комментарий"
+                                className="md:col-span-3 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                              />
+                              <button
+                                onClick={() =>
+                                  setAllocDraftRows((prev) => prev.filter((_, i) => i !== idx))
+                                }
+                                className="md:col-span-1 px-3 py-2 rounded-lg bg-red-700/80 hover:bg-red-600 text-sm"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <button
+                              onClick={() =>
+                                setAllocDraftRows((prev) => [...prev, { client_id: "", amount: "", comment: "" }])
+                              }
+                              className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm"
+                            >
+                              + Строка
+                            </button>
+                            <button
+                              onClick={() => updateAllocations.mutate({ paymentId: p.id, rows: allocDraftRows })}
+                              disabled={updateAllocations.isPending}
+                              className="px-3 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-sm text-white disabled:opacity-50"
+                            >
+                              {updateAllocations.isPending ? "Сохранение..." : "Сохранить распределение"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAllocPaymentId(null);
+                                setAllocDraftRows([]);
+                              }}
+                              className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm"
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                          {updateAllocations.isError && (
+                            <div className="text-red-400 text-sm">
+                              {updateAllocations.error instanceof Error ? updateAllocations.error.message : "Ошибка"}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
                 {(!payments || payments.length === 0) && (
                   <tr className="border-t border-slate-700">

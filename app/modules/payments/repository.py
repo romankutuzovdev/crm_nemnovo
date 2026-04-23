@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.modules.payments.models import Invoice, Payment
+from app.modules.payments.models import Invoice, Payment, PaymentAllocation
 from app.modules.deals.models import Deal
 from app.shared.base_repository import BaseRepository
 from app.shared.enums import PaymentTxStatus
@@ -12,15 +12,26 @@ from app.shared.enums import PaymentTxStatus
 class PaymentRepository(BaseRepository[Payment]):
     model = Payment
 
+    async def get_with_allocations(self, payment_id: UUID) -> Payment | None:
+        result = await self.session.execute(
+            select(Payment)
+            .options(selectinload(Payment.allocations).selectinload(PaymentAllocation.client))
+            .where(Payment.id == payment_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_by_external_id(self, external_id: str) -> Payment | None:
         result = await self.session.execute(
-            select(Payment).where(Payment.external_id == external_id)
+            select(Payment)
+            .options(selectinload(Payment.allocations).selectinload(PaymentAllocation.client))
+            .where(Payment.external_id == external_id)
         )
         return result.scalar_one_or_none()
 
     async def list_by_deal(self, deal_id: UUID) -> list[Payment]:
         result = await self.session.execute(
             select(Payment)
+            .options(selectinload(Payment.allocations).selectinload(PaymentAllocation.client))
             .where(Payment.deal_id == deal_id)
             .order_by(Payment.created_at.desc())
         )
@@ -29,6 +40,7 @@ class PaymentRepository(BaseRepository[Payment]):
     async def list_by_client(self, client_id: UUID) -> list[Payment]:
         result = await self.session.execute(
             select(Payment)
+            .options(selectinload(Payment.allocations).selectinload(PaymentAllocation.client))
             .join(Deal, Deal.id == Payment.deal_id)
             .where(Deal.client_id == client_id)
             .order_by(Payment.created_at.desc())
@@ -55,3 +67,7 @@ class InvoiceRepository(BaseRepository[Invoice]):
             .order_by(Invoice.created_at.desc())
         )
         return list(result.scalars().all())
+
+
+class PaymentAllocationRepository(BaseRepository[PaymentAllocation]):
+    model = PaymentAllocation

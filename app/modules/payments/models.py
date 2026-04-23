@@ -34,6 +34,11 @@ class Payment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     deal: Mapped["Deal"] = relationship("Deal", back_populates="payments")
+    allocations: Mapped[list["PaymentAllocation"]] = relationship(
+        "PaymentAllocation",
+        back_populates="payment",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<Payment {self.id} amount={self.amount} status={self.status}>"
@@ -58,4 +63,22 @@ class Invoice(Base):
 
 
 from app.modules.deals.models import Deal  # noqa: E402
-from app.modules.clients.models import Company  # noqa: E402
+from app.modules.clients.models import Client, Company  # noqa: E402
+
+
+class PaymentAllocation(Base):
+    __tablename__ = "payment_allocations"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    payment_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("payments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    payment: Mapped["Payment"] = relationship("Payment", back_populates="allocations")
+    client: Mapped["Client"] = relationship("Client")

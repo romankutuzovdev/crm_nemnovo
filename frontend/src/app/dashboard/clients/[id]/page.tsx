@@ -256,15 +256,15 @@ export default function ClientDetailsPage() {
             </div>
             <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
               <div className="text-slate-400">Сумма</div>
-              <div className="font-semibold">{totalStats.total.toLocaleString("ru")} ₽</div>
+              <div className="font-semibold">{totalStats.total.toLocaleString("ru")} BYN</div>
             </div>
             <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
               <div className="text-slate-400">Оплачено</div>
-              <div className="font-semibold">{totalStats.paid.toLocaleString("ru")} ₽</div>
+              <div className="font-semibold">{totalStats.paid.toLocaleString("ru")} BYN</div>
             </div>
             <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
               <div className="text-slate-400">Остаток</div>
-              <div className="font-semibold">{totalStats.debt.toLocaleString("ru")} ₽</div>
+              <div className="font-semibold">{totalStats.debt.toLocaleString("ru")} BYN</div>
             </div>
           </div>
           <button
@@ -477,7 +477,7 @@ export default function ClientDetailsPage() {
                   </td>
                   <td className="p-4">{o.start_date} → {o.end_date}</td>
                   <td className="p-4">{o.status}</td>
-                  <td className="p-4">{Number(o.total_amount).toLocaleString("ru")} ₽</td>
+                  <td className="p-4">{Number(o.total_amount).toLocaleString("ru")} BYN</td>
                   <td className="p-4">{o.payment_status}</td>
                 </tr>
               ))}
@@ -509,7 +509,7 @@ export default function ClientDetailsPage() {
                   <td className="p-4">
                     {p.paid_at ? new Date(p.paid_at).toLocaleString("ru") : "—"}
                   </td>
-                  <td className="p-4">{Number(p.amount).toLocaleString("ru")} ₽</td>
+                  <td className="p-4">{Number(p.amount).toLocaleString("ru")} BYN</td>
                   <td className="p-4">{PAYMENT_METHOD_LABELS[p.method] ?? p.method}</td>
                   <td className="p-4">{PAYMENT_STATUS_LABELS[p.status] ?? p.status}</td>
                   <td className="p-4">
@@ -530,7 +530,7 @@ export default function ClientDetailsPage() {
             <div className="px-4 py-2 text-sm text-slate-400 border-t border-slate-700">
               Сумма по списку платежей:{" "}
               <span className="text-slate-200 font-medium">
-                {paymentsListSum.toLocaleString("ru")} ₽
+                {paymentsListSum.toLocaleString("ru")} BYN
               </span>
             </div>
           )}

@@ -355,35 +355,35 @@ export default function ExcursionsPage() {
           />
           <input
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-            placeholder="Доход, ₽"
+            placeholder="Доход, BYN"
             inputMode="decimal"
             value={form.income_total}
             onChange={(e) => setForm((s) => ({ ...s, income_total: e.target.value }))}
           />
           <input
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-            placeholder="Расход (прочий), ₽"
+            placeholder="Расход (прочий), BYN"
             inputMode="decimal"
             value={form.expense_total}
             onChange={(e) => setForm((s) => ({ ...s, expense_total: e.target.value }))}
           />
           <input
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-            placeholder="Доход транспорт, ₽"
+            placeholder="Доход транспорт, BYN"
             inputMode="decimal"
             value={form.transport_income}
             onChange={(e) => setForm((s) => ({ ...s, transport_income: e.target.value }))}
           />
           <input
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-            placeholder="Расход транспорт, ₽"
+            placeholder="Расход транспорт, BYN"
             inputMode="decimal"
             value={form.transport_expense}
             onChange={(e) => setForm((s) => ({ ...s, transport_expense: e.target.value }))}
           />
           <input
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
-            placeholder="Гонорар экскурсоводу, ₽"
+            placeholder="Гонорар экскурсоводу, BYN"
             inputMode="decimal"
             value={form.guide_fee}
             onChange={(e) => setForm((s) => ({ ...s, guide_fee: e.target.value }))}
@@ -442,7 +442,7 @@ export default function ExcursionsPage() {
                 </td>
                 <td className="p-3 text-slate-400">
                   {Number(row.income_total).toLocaleString("ru")} /{" "}
-                  {Number(row.expense_total).toLocaleString("ru")} ₽
+                  {Number(row.expense_total).toLocaleString("ru")} BYN
                 </td>
                 <td className="p-3">
                   <Link
