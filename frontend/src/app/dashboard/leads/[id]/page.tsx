@@ -128,7 +128,7 @@ export default function LeadDetailPage() {
         created_at: s.created_at,
       }))
     );
-  }, [leadQuery.data?.id]);
+  }, [leadQuery.data]);
 
   const auditQuery = useQuery({
     queryKey: ["lead", id, "audit"],

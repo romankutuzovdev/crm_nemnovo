@@ -254,7 +254,7 @@ export default function ExcursionDetailPage() {
   useEffect(() => {
     if (!ex) return;
     setPatchFin((s) => ({ ...s, payment_status: ex.payment_status }));
-  }, [ex?.id, ex?.payment_status]);
+  }, [ex]);
 
   if (!UUID_RE.test(id)) {
     return <p className="text-slate-400">Некорректный идентификатор.</p>;

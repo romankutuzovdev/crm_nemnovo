@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -129,5 +129,19 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center p-4">
+          <p className="text-text-secondary text-sm">Загрузка…</p>
+        </main>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
