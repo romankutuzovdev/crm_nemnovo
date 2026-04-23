@@ -53,7 +53,8 @@ async def seed():
         result = await session.execute(
             select(User).where(User.email == admin_email)
         )
-        if result.scalar_one_or_none() is None:
+        existing_admin = result.scalar_one_or_none()
+        if existing_admin is None:
             admin_role_id = roles["admin"].id
             admin = User(
                 email=admin_email,
@@ -64,7 +65,12 @@ async def seed():
             session.add(admin)
             print(f"  Создан админ: {admin_email} / {admin_pass}")
         else:
-            print(f"  Админ {admin_email} уже существует")
+            # Keep login deterministic in all environments:
+            # if admin already exists, refresh password from env/default seed value.
+            existing_admin.hashed_password = hash_password(admin_pass)
+            if not existing_admin.is_active:
+                existing_admin.is_active = True
+            print(f"  Админ {admin_email} уже существует — пароль обновлён")
 
         # Категории активов (для календаря и бронирований)
         result = await session.execute(select(AssetCategory))
