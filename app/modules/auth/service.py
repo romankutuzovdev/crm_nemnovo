@@ -62,17 +62,15 @@ class AuthService:
         access_token = create_access_token(user.id, user.role.name)
         return AccessTokenResponse(access_token=access_token)
 
-    async def logout(self, token: str, redis) -> None:
+    async def logout(self, token: str, redis_client) -> None:
         try:
             payload = decode_token(token)
             jti = payload.get("jti", token[-16:])
             exp = payload.get("exp", 0)
             ttl = max(0, int(exp - datetime.now(timezone.utc).timestamp()))
             try:
-                await redis.setex(f"token:blacklist:{jti}", ttl, "1")
+                await redis_client.setex(f"token:blacklist:{jti}", ttl, "1")
             except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
-                if settings.is_production:
-                    raise
                 logger.warning(
                     "redis.unavailable_logout_no_blacklist",
                     error=str(e),

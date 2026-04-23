@@ -1,4 +1,4 @@
-import redis.exceptions
+from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 import structlog
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
-    redis=Depends(get_redis),
+    redis_client=Depends(get_redis),
 ) -> User:
     token = credentials.credentials
 
@@ -34,14 +34,14 @@ async def get_current_user(
     # Check blacklist (в production Redis обязателен)
     jti = payload.get("jti", token[-16:])
     try:
-        blacklisted = await redis.exists(f"token:blacklist:{jti}")
-    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
-        if settings.is_production:
-            raise
+        blacklisted = await redis_client.exists(f"token:blacklist:{jti}")
+    except (RedisConnectionError, RedisTimeoutError) as e:
+        # Fail-open для auth-проверки: если Redis временно недоступен, не роняем API целиком.
+        # Это лучше, чем массовые 500 на защищённых эндпоинтах.
         logger.warning(
             "redis.unavailable_skip_blacklist",
             error=str(e),
-            hint="Запустите Redis (localhost:6379) или установите APP_ENV=production только на сервере с Redis",
+            hint="Проверьте REDIS_URL и доступность Redis",
         )
         blacklisted = False
     if blacklisted:
