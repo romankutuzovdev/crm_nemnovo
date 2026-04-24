@@ -146,6 +146,66 @@ function CalendarColorsSection() {
   );
 }
 
+function DemoSeedSection() {
+  const getToken = useAuthStore((s) => s.getToken);
+  const user = useAuthStore((s) => s.user);
+  const canRun =
+    user?.role?.name === "admin" || user?.role?.name === "director";
+
+  const seedMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<{ ok: boolean; message: string; log?: string }>("/settings/demo-seed", {
+        method: "POST",
+        token: getToken() ?? undefined,
+      }),
+  });
+
+  return (
+    <section className="rounded-xl border border-slate-700 bg-slate-800/30 p-5 text-slate-300">
+      <h2 className="text-lg font-semibold text-slate-100 mb-2">Демо-данные</h2>
+      <p className="text-sm text-slate-400 mb-4 leading-snug">
+        Создаёт тестовые/рандомизированные записи в основных таблицах через сид-скрипты
+        (<code className="text-slate-300">seed.py</code> и{" "}
+        <code className="text-slate-300">seed_demo_data.py</code>).
+      </p>
+      <div className="flex flex-wrap gap-2 items-center">
+        <button
+          type="button"
+          onClick={() => seedMutation.mutate()}
+          disabled={!canRun || seedMutation.isPending}
+          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm disabled:opacity-50"
+        >
+          {seedMutation.isPending ? "Генерация..." : "Создать демо-данные"}
+        </button>
+        {!canRun && (
+          <span className="text-xs text-slate-500">
+            Доступно только администратору/директору.
+          </span>
+        )}
+      </div>
+      {seedMutation.isError && (
+        <p className="text-sm text-red-400 mt-3">
+          {seedMutation.error instanceof Error
+            ? seedMutation.error.message
+            : "Ошибка запуска seed"}
+        </p>
+      )}
+      {seedMutation.isSuccess && (
+        <div className="mt-3 space-y-2">
+          <p className="text-sm text-green-400/90">
+            {seedMutation.data?.message ?? "Демо-данные созданы"}
+          </p>
+          {seedMutation.data?.log && (
+            <pre className="text-xs overflow-x-auto p-3 rounded-lg bg-slate-950 border border-slate-700 text-slate-300 whitespace-pre-wrap max-h-64 overflow-y-auto">
+              {seedMutation.data.log}
+            </pre>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const fullUrl = `${API_URL}${SITE_WEBHOOK_PATH}`;
   const telephonyUrl = `${API_URL}${TELEPHONY_WEBHOOK_PATH}`;
@@ -162,6 +222,7 @@ export default function SettingsPage() {
       </div>
 
       <CalendarColorsSection />
+      <DemoSeedSection />
 
       <section className="rounded-xl border border-border bg-surface p-5 text-text">
         <h2 className="text-lg font-semibold text-text mb-2">Приём заявок с сайта (webhook)</h2>
