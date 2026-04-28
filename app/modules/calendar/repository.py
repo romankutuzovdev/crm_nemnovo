@@ -63,6 +63,7 @@ class CalendarRepository:
         manager_id: UUID | None = None,
         service_type: str | None = None,
         color_map: dict[str, str] | None = None,
+        include_archived: bool = False,
     ) -> list[dict]:
         """Возвращает события для календаря: бронирования и заявки."""
         colors = color_map or {}
@@ -72,6 +73,11 @@ class CalendarRepository:
         end_dt = datetime.combine(end, time.max)
 
         # События по сделкам: одна карточка на заказ (агрегация по deal_id)
+        booking_status_filter = (
+            Booking.status == BookingStatus.CANCELLED
+            if include_archived
+            else Booking.status != BookingStatus.CANCELLED
+        )
         stmt = (
             select(Deal)
             .options(
@@ -83,7 +89,7 @@ class CalendarRepository:
             .where(
                 Deal.bookings.any(
                     and_(
-                        Booking.status != BookingStatus.CANCELLED,
+                        booking_status_filter,
                         Booking.start_datetime <= end_dt,
                         Booking.end_datetime >= start_dt,
                     )
@@ -103,7 +109,11 @@ class CalendarRepository:
             active_bookings = [
                 b
                 for b in deal.bookings
-                if b.status != BookingStatus.CANCELLED
+                if (
+                    b.status == BookingStatus.CANCELLED
+                    if include_archived
+                    else b.status != BookingStatus.CANCELLED
+                )
                 and b.start_datetime <= end_dt
                 and b.end_datetime >= start_dt
             ]
@@ -161,7 +171,11 @@ class CalendarRepository:
             .join(HostelRoom, HostelRoom.id == HostelBooking.room_id)
             .where(
                 and_(
-                    HostelBooking.status != BookingStatus.CANCELLED,
+                    (
+                        HostelBooking.status == BookingStatus.CANCELLED
+                        if include_archived
+                        else HostelBooking.status != BookingStatus.CANCELLED
+                    ),
                     HostelBooking.check_in <= end,
                     HostelBooking.check_out >= start,
                 )
@@ -211,7 +225,11 @@ class CalendarRepository:
             .outerjoin(Client, Client.id == Deal.client_id)
             .where(
                 and_(
-                    RentOrder.status != BookingStatus.CANCELLED,
+                    (
+                        RentOrder.status == BookingStatus.CANCELLED
+                        if include_archived
+                        else RentOrder.status != BookingStatus.CANCELLED
+                    ),
                     RentOrder.service_date >= start,
                     RentOrder.service_date <= end,
                 )
@@ -260,7 +278,11 @@ class CalendarRepository:
             .join(RaftingRoute, RaftingRoute.id == RaftingTrip.route_id)
             .where(
                 and_(
-                    RaftingTrip.status != BookingStatus.CANCELLED,
+                    (
+                        RaftingTrip.status == BookingStatus.CANCELLED
+                        if include_archived
+                        else RaftingTrip.status != BookingStatus.CANCELLED
+                    ),
                     RaftingTrip.trip_date >= start,
                     RaftingTrip.trip_date <= end,
                 )
@@ -315,7 +337,9 @@ class CalendarRepository:
             .outerjoin(Client, Client.id == Lead.client_id)
             .where(
                 and_(
-                    Lead.status.in_([LeadStatus.NEW, LeadStatus.IN_PROGRESS]),
+                    Lead.status.in_([LeadStatus.REJECTED])
+                    if include_archived
+                    else Lead.status.in_([LeadStatus.NEW, LeadStatus.IN_PROGRESS]),
                     or_(
                         and_(Lead.preferred_date.isnot(None), Lead.preferred_date >= start, Lead.preferred_date <= end),
                         and_(Lead.preferred_date.is_(None), func.date(Lead.created_at) >= start, func.date(Lead.created_at) <= end),

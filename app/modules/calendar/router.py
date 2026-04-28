@@ -23,6 +23,10 @@ class BookingMoveRequest(BaseModel):
     end: str
 
 
+class CalendarArchiveRequest(BaseModel):
+    event_id: str
+
+
 from app.modules.orders.schemas import BookingInOrderCreate, OrderCreate, OrderItemCreate
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -55,6 +59,203 @@ async def get_calendar_events(
         color_map=color_map,
     )
     return events
+
+
+@router.get("/events/archive", response_model=list[CalendarEventResponse])
+async def get_calendar_archived_events(
+    start: date = Query(...),
+    end: date = Query(...),
+    asset_id: UUID | None = Query(None),
+    manager_id: UUID | None = Query(None, description="Фильтр по менеджеру"),
+    service_type: ServiceType | None = Query(None, description="Тип услуги заказа / заявки"),
+    current_user=require_permission("bookings", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Архив календаря: отменённые/отклонённые события по периоду."""
+    if current_user.role.name == "manager":
+        manager_id = current_user.id
+    ui_repo = UiSettingsRepository(db)
+    color_map = await ui_repo.get_calendar_colors()
+    repo = CalendarRepository(db)
+    st = service_type.value if service_type else None
+    events = await repo.get_events(
+        start,
+        end,
+        asset_id=asset_id,
+        manager_id=manager_id,
+        service_type=st,
+        color_map=color_map,
+        include_archived=True,
+    )
+    return events
+
+
+@router.post("/events/archive")
+async def archive_calendar_event(
+    data: CalendarArchiveRequest,
+    current_user=require_permission("bookings", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Пометить событие календаря как архивное (soft delete)."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.core.exceptions import NotFoundError, ValidationError
+    from app.modules.bookings.models import Booking
+    from app.modules.deals.models import Deal
+    from app.modules.hostel.models import HostelBooking
+    from app.modules.leads.models import Lead
+    from app.modules.rafting.models import RaftingTrip
+    from app.modules.rent.models import RentOrder
+    from app.shared.enums import BookingStatus, DealStatus, LeadStatus
+
+    event_id = (data.event_id or "").strip()
+    if ":" not in event_id:
+        raise ValidationError("Некорректный event_id")
+    ev_type, raw_id = event_id.split(":", 1)
+    try:
+        entity_id = UUID(raw_id)
+    except ValueError as exc:
+        raise ValidationError("Некорректный UUID event_id") from exc
+
+    if ev_type == "deal":
+        row = await db.execute(
+            select(Deal).options(selectinload(Deal.bookings)).where(Deal.id == entity_id)
+        )
+        deal = row.scalar_one_or_none()
+        if not deal:
+            raise NotFoundError("Сделка не найдена")
+        deal.status = DealStatus.CANCELLED
+        for b in deal.bookings:
+            if b.status != BookingStatus.CANCELLED:
+                b.status = BookingStatus.CANCELLED
+        return {"ok": True}
+
+    if ev_type == "booking":
+        row = await db.execute(select(Booking).where(Booking.id == entity_id))
+        booking = row.scalar_one_or_none()
+        if not booking:
+            raise NotFoundError("Бронирование не найдено")
+        booking.status = BookingStatus.CANCELLED
+        return {"ok": True}
+
+    if ev_type == "lead":
+        row = await db.execute(select(Lead).where(Lead.id == entity_id))
+        lead = row.scalar_one_or_none()
+        if not lead:
+            raise NotFoundError("Заявка не найдена")
+        lead.status = LeadStatus.REJECTED
+        return {"ok": True}
+
+    if ev_type == "hostel":
+        row = await db.execute(select(HostelBooking).where(HostelBooking.id == entity_id))
+        booking = row.scalar_one_or_none()
+        if not booking:
+            raise NotFoundError("Бронирование хостела не найдено")
+        booking.status = BookingStatus.CANCELLED
+        return {"ok": True}
+
+    if ev_type == "rent":
+        row = await db.execute(select(RentOrder).where(RentOrder.id == entity_id))
+        order = row.scalar_one_or_none()
+        if not order:
+            raise NotFoundError("Аренда не найдена")
+        order.status = BookingStatus.CANCELLED
+        return {"ok": True}
+
+    if ev_type == "rafting":
+        row = await db.execute(select(RaftingTrip).where(RaftingTrip.id == entity_id))
+        trip = row.scalar_one_or_none()
+        if not trip:
+            raise NotFoundError("Сплав не найден")
+        trip.status = BookingStatus.CANCELLED
+        return {"ok": True}
+
+    raise ValidationError(f"Тип события не поддерживается: {ev_type}")
+
+
+@router.post("/events/archive/restore")
+async def restore_calendar_event_from_archive(
+    data: CalendarArchiveRequest,
+    current_user=require_permission("bookings", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Восстановить событие из архива (reverse soft delete)."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.core.exceptions import NotFoundError, ValidationError
+    from app.modules.bookings.models import Booking
+    from app.modules.deals.models import Deal
+    from app.modules.hostel.models import HostelBooking
+    from app.modules.leads.models import Lead
+    from app.modules.rafting.models import RaftingTrip
+    from app.modules.rent.models import RentOrder
+    from app.shared.enums import BookingStatus, DealStatus, LeadStatus
+
+    event_id = (data.event_id or "").strip()
+    if ":" not in event_id:
+        raise ValidationError("Некорректный event_id")
+    ev_type, raw_id = event_id.split(":", 1)
+    try:
+        entity_id = UUID(raw_id)
+    except ValueError as exc:
+        raise ValidationError("Некорректный UUID event_id") from exc
+
+    if ev_type == "deal":
+        row = await db.execute(
+            select(Deal).options(selectinload(Deal.bookings)).where(Deal.id == entity_id)
+        )
+        deal = row.scalar_one_or_none()
+        if not deal:
+            raise NotFoundError("Сделка не найдена")
+        deal.status = DealStatus.CONFIRMED
+        for b in deal.bookings:
+            if b.status == BookingStatus.CANCELLED:
+                b.status = BookingStatus.CONFIRMED
+        return {"ok": True}
+
+    if ev_type == "booking":
+        row = await db.execute(select(Booking).where(Booking.id == entity_id))
+        booking = row.scalar_one_or_none()
+        if not booking:
+            raise NotFoundError("Бронирование не найдено")
+        booking.status = BookingStatus.CONFIRMED
+        return {"ok": True}
+
+    if ev_type == "lead":
+        row = await db.execute(select(Lead).where(Lead.id == entity_id))
+        lead = row.scalar_one_or_none()
+        if not lead:
+            raise NotFoundError("Заявка не найдена")
+        lead.status = LeadStatus.IN_PROGRESS
+        return {"ok": True}
+
+    if ev_type == "hostel":
+        row = await db.execute(select(HostelBooking).where(HostelBooking.id == entity_id))
+        booking = row.scalar_one_or_none()
+        if not booking:
+            raise NotFoundError("Бронирование хостела не найдено")
+        booking.status = BookingStatus.CONFIRMED
+        return {"ok": True}
+
+    if ev_type == "rent":
+        row = await db.execute(select(RentOrder).where(RentOrder.id == entity_id))
+        order = row.scalar_one_or_none()
+        if not order:
+            raise NotFoundError("Аренда не найдена")
+        order.status = BookingStatus.CONFIRMED
+        return {"ok": True}
+
+    if ev_type == "rafting":
+        row = await db.execute(select(RaftingTrip).where(RaftingTrip.id == entity_id))
+        trip = row.scalar_one_or_none()
+        if not trip:
+            raise NotFoundError("Сплав не найден")
+        trip.status = BookingStatus.CONFIRMED
+        return {"ok": True}
+
+    raise ValidationError(f"Тип события не поддерживается: {ev_type}")
 
 
 @router.patch("/events/booking/{booking_id}")

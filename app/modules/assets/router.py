@@ -1,11 +1,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.assets.schemas import (
+    AssetCategoryResponse,
     AssetAuditEntryResponse,
     AssetAvailabilityRequest,
     AssetCreate,
@@ -23,8 +25,18 @@ from app.modules.assets.schemas import (
 )
 from app.modules.assets.service import AssetService
 from app.modules.assets.repository import ProductRepository
+from app.modules.assets.models import AssetCategory
 
 router = APIRouter(prefix="/assets", tags=["assets"])
+
+
+@router.get("/categories", response_model=list[AssetCategoryResponse])
+async def list_asset_categories(
+    current_user=require_permission("assets", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(AssetCategory).order_by(AssetCategory.name.asc()))
+    return list(result.scalars().all())
 
 
 @router.get("/", response_model=list[AssetResponse])

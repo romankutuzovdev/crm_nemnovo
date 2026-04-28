@@ -242,7 +242,7 @@ export default function ClientDetailsPage() {
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">
-            {client.first_name} {client.last_name}
+            {client.last_name} {client.first_name}
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             Карточка клиента: основные контакты и комментарий редактируются на вкладке «Карточка». Хронология заметок — в «Заметки».
@@ -404,7 +404,7 @@ export default function ClientDetailsPage() {
                   <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
                     <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">ФИО</div>
                     <div className="text-lg text-slate-100 font-medium">
-                      {client.first_name} {client.last_name}
+                      {client.last_name} {client.first_name}
                     </div>
                   </div>
                   <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">

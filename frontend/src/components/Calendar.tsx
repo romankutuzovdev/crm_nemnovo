@@ -127,6 +127,16 @@ interface SelectedCalendarEvent {
   contract_text?: string;
 }
 
+interface ArchivedCalendarEventRow {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  event_type: string;
+  client_name?: string | null;
+  status?: string | null;
+}
+
 interface OrderSummary {
   id: string;
   number: string;
@@ -335,6 +345,12 @@ export default function Calendar() {
   const [excursionGuides, setExcursionGuides] = useState<ExcursionGuideRow[]>([]);
   const [newExcursionGuideId, setNewExcursionGuideId] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<SelectedCalendarEvent | null>(null);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archivedEvents, setArchivedEvents] = useState<ArchivedCalendarEventRow[]>([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveSaving, setArchiveSaving] = useState(false);
+  const [restoreSavingEventId, setRestoreSavingEventId] = useState<string | null>(null);
   const [orderDetail, setOrderDetail] = useState<OrderSummary | null>(null);
   const [dealNotes, setDealNotes] = useState("");
   const [dealStartDate, setDealStartDate] = useState("");
@@ -541,6 +557,72 @@ export default function Calendar() {
       })
     );
   }, [assetFilter, getToken, managerFilter, serviceTypeFilter]);
+
+  const fetchArchivedEvents = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    setArchiveLoading(true);
+    setArchiveError(null);
+    try {
+      const start = dateRange?.start ?? new Date(new Date().setDate(new Date().getDate() - 45));
+      const end = dateRange?.end ?? new Date(new Date().setDate(new Date().getDate() + 45));
+      const params = new URLSearchParams({
+        start: start.toISOString().slice(0, 10),
+        end: end.toISOString().slice(0, 10),
+      });
+      if (managerFilter) params.set("manager_id", managerFilter);
+      if (assetFilter) params.set("asset_id", assetFilter);
+      if (serviceTypeFilter) params.set("service_type", serviceTypeFilter);
+      const data = await apiFetch<ArchivedCalendarEventRow[]>(`/calendar/events/archive?${params}`, { token });
+      setArchivedEvents(data);
+    } catch (err) {
+      setArchiveError(err instanceof Error ? err.message : "Не удалось загрузить архив");
+    } finally {
+      setArchiveLoading(false);
+    }
+  }, [assetFilter, dateRange, getToken, managerFilter, serviceTypeFilter]);
+
+  const archiveSelectedEvent = useCallback(async () => {
+    if (!selectedEvent?.calendarId) return;
+    const token = getToken();
+    if (!token) return;
+    setArchiveSaving(true);
+    setDetailError(null);
+    try {
+      await apiFetch("/calendar/events/archive", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ event_id: selectedEvent.calendarId }),
+      });
+      closeEventModal();
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      if (showArchiveModal) await fetchArchivedEvents();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Не удалось отправить событие в архив");
+    } finally {
+      setArchiveSaving(false);
+    }
+  }, [dateRange, fetchArchivedEvents, fetchEvents, getToken, selectedEvent?.calendarId, showArchiveModal]);
+
+  const restoreArchivedEvent = useCallback(async (eventId: string) => {
+    const token = getToken();
+    if (!token) return;
+    setRestoreSavingEventId(eventId);
+    setArchiveError(null);
+    try {
+      await apiFetch("/calendar/events/archive/restore", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ event_id: eventId }),
+      });
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      await fetchArchivedEvents();
+    } catch (err) {
+      setArchiveError(err instanceof Error ? err.message : "Не удалось восстановить событие");
+    } finally {
+      setRestoreSavingEventId(null);
+    }
+  }, [dateRange, fetchArchivedEvents, fetchEvents, getToken]);
 
   useEffect(() => {
     if (dateRange) {
@@ -1548,6 +1630,16 @@ export default function Calendar() {
             className="px-4 py-2 bg-brandBlue-600 hover:bg-brandBlue-700 text-white rounded-lg text-sm font-medium"
           >
             + Добавить
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowArchiveModal(true);
+              void fetchArchivedEvents();
+            }}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium"
+          >
+            Архив
           </button>
         </div>
       </div>
@@ -3002,6 +3094,24 @@ export default function Calendar() {
             )}
 
             <div className="pt-4 flex gap-2">
+              {selectedEvent.calendarId.startsWith("deal:") ||
+              selectedEvent.calendarId.startsWith("booking:") ||
+              selectedEvent.calendarId.startsWith("lead:") ||
+              selectedEvent.calendarId.startsWith("rafting:") ||
+              selectedEvent.calendarId.startsWith("hostel:") ||
+              selectedEvent.calendarId.startsWith("rent:") ? (
+                <button
+                  type="button"
+                  disabled={archiveSaving}
+                  onClick={() => {
+                    if (!confirm("Переместить это событие в архив?")) return;
+                    void archiveSelectedEvent();
+                  }}
+                  className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-lg text-white disabled:opacity-50"
+                >
+                  {archiveSaving ? "…" : "В архив"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={closeEventModal}
@@ -3010,6 +3120,73 @@ export default function Calendar() {
                 Закрыть
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showArchiveModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-4xl border border-slate-200 dark:border-slate-700 shadow-xl max-h-[90vh] overflow-y-auto text-slate-900 dark:text-slate-100">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold">Архив календаря</h2>
+              <button
+                type="button"
+                onClick={() => setShowArchiveModal(false)}
+                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm"
+              >
+                Закрыть
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Показываются отменённые/архивные события в текущем диапазоне календаря и с текущими фильтрами.
+            </p>
+            {archiveError && <p className="text-sm text-red-500 mb-3">{archiveError}</p>}
+            {archiveLoading ? (
+              <p className="text-sm text-slate-500">Загрузка…</p>
+            ) : archivedEvents.length === 0 ? (
+              <p className="text-sm text-slate-500">Архив пуст.</p>
+            ) : (
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-100 dark:bg-slate-800/60">
+                    <tr>
+                      <th className="text-left p-3">Событие</th>
+                      <th className="text-left p-3">Тип</th>
+                      <th className="text-left p-3">Клиент</th>
+                      <th className="text-left p-3">Статус</th>
+                      <th className="text-left p-3">Период</th>
+                      <th className="text-left p-3">Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {archivedEvents.map((ev) => (
+                      <tr key={ev.id} className="border-t border-slate-200 dark:border-slate-700">
+                        <td className="p-3">{ev.title}</td>
+                        <td className="p-3">{SERVICE_TYPE_LABELS[ev.event_type] ?? ev.event_type}</td>
+                        <td className="p-3">{ev.client_name || "—"}</td>
+                        <td className="p-3">{GENERIC_STATUS_LABELS[ev.status ?? ""] ?? ev.status ?? "—"}</td>
+                        <td className="p-3 whitespace-nowrap">
+                          {new Date(ev.start).toLocaleString("ru-RU")} - {new Date(ev.end).toLocaleString("ru-RU")}
+                        </td>
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            disabled={restoreSavingEventId === ev.id}
+                            onClick={() => {
+                              if (!confirm("Восстановить это событие из архива?")) return;
+                              void restoreArchivedEvent(ev.id);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs disabled:opacity-50"
+                          >
+                            {restoreSavingEventId === ev.id ? "…" : "Восстановить"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

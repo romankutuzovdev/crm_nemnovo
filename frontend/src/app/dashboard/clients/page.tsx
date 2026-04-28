@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 
 interface Client {
   id: string;
@@ -39,6 +40,15 @@ export default function ClientsPage() {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    if (!showCreate) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showCreate]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["clients", debouncedSearch],
@@ -144,9 +154,10 @@ export default function ClientsPage() {
         </p>
       )}
 
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
+      {showCreate &&
+        createPortal(
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+            <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h2 className="text-lg font-semibold mb-4">Новый клиент</h2>
             <div className="space-y-3">
               <div>
@@ -225,8 +236,9 @@ export default function ClientsPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

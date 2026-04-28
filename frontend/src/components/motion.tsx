@@ -16,9 +16,11 @@ export function PageTransition({
     <motion.div
       className={className}
       key={routeKey}
-      initial={{ opacity: 0, y: 10, filter: "blur(2px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      exit={{ opacity: 0, y: -6, filter: "blur(2px)" }}
+      // Keep route transition free from transform/filter so fixed modals
+      // are always attached to viewport across all dashboard pages.
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       transition={{ duration: 0.22, ease: "easeOut" }}
     >
       {children}

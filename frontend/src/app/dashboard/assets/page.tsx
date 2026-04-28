@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -28,17 +29,77 @@ const statusRu: Record<string, string> = {
 
 export default function AssetsPage() {
   const getToken = useAuthStore((s) => s.getToken);
+  const token = getToken() ?? undefined;
+  const queryClient = useQueryClient();
+  const [createForm, setCreateForm] = useState({
+    category_id: "",
+    name: "",
+    code: "",
+    capacity: "1",
+    quantity: "1",
+    description: "",
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["asset-categories"],
+    queryFn: () =>
+      apiFetch<AssetCategory[]>("/assets/categories", {
+        token,
+      }),
+    enabled: !!token,
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["assets"],
     queryFn: () =>
       apiFetch<Asset[]>("/assets/", {
-        token: getToken() ?? undefined,
+        token,
       }),
-    enabled: !!getToken(),
+    enabled: !!token,
   });
 
   const assets = data ?? [];
+  const defaultCategoryId = categories[0]?.id ?? null;
+
+  const canCreate = useMemo(() => {
+    return (
+      (createForm.category_id || defaultCategoryId != null) &&
+      createForm.name.trim() &&
+      createForm.code.trim()
+    );
+  }, [createForm.category_id, createForm.name, createForm.code, defaultCategoryId]);
+
+  const createAsset = useMutation({
+    mutationFn: async () => {
+      const categoryRaw = createForm.category_id || (defaultCategoryId != null ? String(defaultCategoryId) : "");
+      const categoryId = parseInt(categoryRaw, 10);
+      const capacity = Math.max(1, parseInt(createForm.capacity, 10) || 1);
+      const quantity = Math.max(0, parseInt(createForm.quantity, 10) || 0);
+      return apiFetch<Asset>("/assets/", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          category_id: categoryId,
+          name: createForm.name.trim(),
+          code: createForm.code.trim(),
+          capacity,
+          quantity,
+          description: createForm.description.trim() || null,
+        }),
+      });
+    },
+    onSuccess: async () => {
+      setCreateForm((prev) => ({
+        ...prev,
+        name: "",
+        code: "",
+        capacity: "1",
+        quantity: "1",
+        description: "",
+      }));
+      await queryClient.invalidateQueries({ queryKey: ["assets"] });
+    },
+  });
 
   if (isLoading) return <div className="text-slate-500">Загрузка...</div>;
   if (error)
@@ -57,6 +118,67 @@ export default function AssetsPage() {
         <strong className="font-medium text-slate-300">«Слоты»</strong> мероприятий и при проверке пересечений. Детали
         актива — по клику в таблицу.
       </p>
+      <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4 mb-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">Добавить актив</h2>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <select
+            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+            value={createForm.category_id}
+            onChange={(e) => setCreateForm((s) => ({ ...s, category_id: e.target.value }))}
+          >
+            {defaultCategoryId != null && !createForm.category_id && (
+              <option value="">Категория (по умолчанию: {categories[0]?.name})</option>
+            )}
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+            placeholder="Название *"
+            value={createForm.name}
+            onChange={(e) => setCreateForm((s) => ({ ...s, name: e.target.value }))}
+          />
+          <input
+            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+            placeholder="Код * (уникальный)"
+            value={createForm.code}
+            onChange={(e) => setCreateForm((s) => ({ ...s, code: e.target.value.toUpperCase() }))}
+          />
+          <input
+            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+            placeholder="Мест на единицу"
+            inputMode="numeric"
+            value={createForm.capacity}
+            onChange={(e) => setCreateForm((s) => ({ ...s, capacity: e.target.value }))}
+          />
+          <input
+            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+            placeholder="Количество единиц"
+            inputMode="numeric"
+            value={createForm.quantity}
+            onChange={(e) => setCreateForm((s) => ({ ...s, quantity: e.target.value }))}
+          />
+          <input
+            className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 md:col-span-2 lg:col-span-1"
+            placeholder="Описание (необязательно)"
+            value={createForm.description}
+            onChange={(e) => setCreateForm((s) => ({ ...s, description: e.target.value }))}
+          />
+        </div>
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => createAsset.mutate()}
+            disabled={createAsset.isPending || !canCreate}
+            className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
+          >
+            {createAsset.isPending ? "..." : "Добавить актив"}
+          </button>
+        </div>
+      </div>
       {assets.length > 0 ? (
         <div className="rounded-xl border border-slate-700 overflow-hidden">
           <table className="w-full">

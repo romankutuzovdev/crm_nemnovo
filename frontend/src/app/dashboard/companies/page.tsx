@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -164,86 +165,88 @@ export default function CompaniesPage() {
         </p>
       )}
 
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-4">Новая компания</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Название *</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
-                  value={createForm.name}
-                  onChange={(e) => setCreateForm((s) => ({ ...s, name: e.target.value }))}
-                />
+      {showCreate &&
+        createPortal(
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+            <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
+              <h2 className="text-lg font-semibold mb-4">Новая компания</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Название *</label>
+                  <input
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm((s) => ({ ...s, name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">ИНН</label>
+                  <input
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
+                    value={createForm.inn}
+                    onChange={(e) => setCreateForm((s) => ({ ...s, inn: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Телефон</label>
+                  <input
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
+                    value={createForm.phone}
+                    onChange={(e) => setCreateForm((s) => ({ ...s, phone: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Email</label>
+                  <input
+                    type="email"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
+                    value={createForm.email}
+                    onChange={(e) => setCreateForm((s) => ({ ...s, email: e.target.value }))}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-slate-400 mb-1">Тип контрагента</label>
+                  <select
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
+                    value={createForm.segment}
+                    onChange={(e) =>
+                      setCreateForm((s) => ({ ...s, segment: e.target.value as "b2b" | "b2c" }))
+                    }
+                  >
+                    <option value="b2b">{SEGMENT_LABELS.b2b}</option>
+                    <option value="b2c">{SEGMENT_LABELS.b2c}</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">ИНН</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
-                  value={createForm.inn}
-                  onChange={(e) => setCreateForm((s) => ({ ...s, inn: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Телефон</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
-                  value={createForm.phone}
-                  onChange={(e) => setCreateForm((s) => ({ ...s, phone: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">Email</label>
-                <input
-                  type="email"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm((s) => ({ ...s, email: e.target.value }))}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm text-slate-400 mb-1">Тип контрагента</label>
-                <select
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
-                  value={createForm.segment}
-                  onChange={(e) =>
-                    setCreateForm((s) => ({ ...s, segment: e.target.value as "b2b" | "b2c" }))
-                  }
+              {createCompany.isError && (
+                <p className="text-red-400 text-sm mt-3">
+                  {createCompany.error instanceof Error ? createCompany.error.message : "Ошибка"}
+                </p>
+              )}
+              <div className="flex justify-end gap-2 mt-6">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+                  onClick={() => {
+                    setShowCreate(false);
+                    createCompany.reset();
+                  }}
                 >
-                  <option value="b2b">{SEGMENT_LABELS.b2b}</option>
-                  <option value="b2c">{SEGMENT_LABELS.b2c}</option>
-                </select>
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
+                  disabled={createCompany.isPending || !createForm.name.trim()}
+                  onClick={() => createCompany.mutate()}
+                >
+                  {createCompany.isPending ? "Создание…" : "Создать"}
+                </button>
               </div>
             </div>
-            {createCompany.isError && (
-              <p className="text-red-400 text-sm mt-3">
-                {createCompany.error instanceof Error ? createCompany.error.message : "Ошибка"}
-              </p>
-            )}
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
-                onClick={() => {
-                  setShowCreate(false);
-                  createCompany.reset();
-                }}
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
-                disabled={createCompany.isPending || !createForm.name.trim()}
-                onClick={() => createCompany.mutate()}
-              >
-                {createCompany.isPending ? "Создание…" : "Создать"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
