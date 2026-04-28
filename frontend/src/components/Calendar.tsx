@@ -604,6 +604,37 @@ export default function Calendar() {
     }
   }, [dateRange, fetchArchivedEvents, fetchEvents, getToken, selectedEvent?.calendarId, showArchiveModal]);
 
+  const archiveEditingLeadFromForm = useCallback(async () => {
+    if (!editingCalendarLeadId) return;
+    const token = getToken();
+    if (!token) return;
+    setDetailError(null);
+    setArchiveSaving(true);
+    try {
+      await apiFetch("/calendar/events/archive", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ event_id: `lead:${editingCalendarLeadId}` }),
+      });
+      setShowAddModal(false);
+      setAddDate(null);
+      setEditingCalendarLeadId(null);
+      if (dateRange) await fetchEvents(dateRange.start, dateRange.end);
+      if (showArchiveModal) await fetchArchivedEvents();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Не удалось отправить заявку в архив");
+    } finally {
+      setArchiveSaving(false);
+    }
+  }, [
+    dateRange,
+    editingCalendarLeadId,
+    fetchArchivedEvents,
+    fetchEvents,
+    getToken,
+    showArchiveModal,
+  ]);
+
   const restoreArchivedEvent = useCallback(async (eventId: string) => {
     const token = getToken();
     if (!token) return;
@@ -2298,6 +2329,19 @@ export default function Calendar() {
                 >
                   {editingCalendarLeadId ? "Сохранить" : "Создать"}
                 </button>
+                {editingCalendarLeadId && (
+                  <button
+                    type="button"
+                    disabled={archiveSaving}
+                    onClick={() => {
+                      if (!confirm("Переместить заявку в архив?")) return;
+                      void archiveEditingLeadFromForm();
+                    }}
+                    className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white rounded-lg disabled:opacity-50"
+                  >
+                    {archiveSaving ? "…" : "В архив"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
