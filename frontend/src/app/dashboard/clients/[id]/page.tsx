@@ -227,15 +227,15 @@ export default function ClientDetailsPage() {
     return (paymentsByOrders ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0);
   }, [paymentsByOrders]);
 
-  if (isLoading) return <div className="text-slate-500">Загрузка...</div>;
+  if (isLoading) return <div className="text-slate-500 dark:text-slate-400">Загрузка...</div>;
   if (error) {
     return (
-      <div className="text-red-400">
+      <div className="text-red-600 dark:text-red-400">
         Ошибка: {error instanceof Error ? error.message : "Неизвестная ошибка"}
       </div>
     );
   }
-  if (!client) return <div className="text-slate-500">Клиент не найден</div>;
+  if (!client) return <div className="text-slate-500 dark:text-slate-400">Клиент не найден</div>;
 
   return (
     <div className="space-y-4">
@@ -244,26 +244,26 @@ export default function ClientDetailsPage() {
           <h1 className="text-2xl font-bold">
             {client.last_name} {client.first_name}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
             Карточка клиента: основные контакты и комментарий редактируются на вкладке «Карточка». Хронология заметок — в «Заметки».
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center shrink-0">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-              <div className="text-slate-400">Заказов</div>
+            <div className="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-800/40 dark:border-slate-700">
+              <div className="text-slate-600 dark:text-slate-400">Заказов</div>
               <div className="font-semibold">{totalStats.count}</div>
             </div>
-            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-              <div className="text-slate-400">Сумма</div>
+            <div className="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-800/40 dark:border-slate-700">
+              <div className="text-slate-600 dark:text-slate-400">Сумма</div>
               <div className="font-semibold">{totalStats.total.toLocaleString("ru")} BYN</div>
             </div>
-            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-              <div className="text-slate-400">Оплачено</div>
+            <div className="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-800/40 dark:border-slate-700">
+              <div className="text-slate-600 dark:text-slate-400">Оплачено</div>
               <div className="font-semibold">{totalStats.paid.toLocaleString("ru")} BYN</div>
             </div>
-            <div className="px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700">
-              <div className="text-slate-400">Остаток</div>
+            <div className="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 dark:bg-slate-800/40 dark:border-slate-700">
+              <div className="text-slate-600 dark:text-slate-400">Остаток</div>
               <div className="font-semibold">{totalStats.debt.toLocaleString("ru")} BYN</div>
             </div>
           </div>
@@ -282,14 +282,14 @@ export default function ClientDetailsPage() {
               setIsEditing((v) => !v);
               setTab("card");
             }}
-            className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 whitespace-nowrap"
+            className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white whitespace-nowrap"
           >
             {isEditing ? "Закрыть редактирование" : "Редактировать карточку"}
           </button>
         </div>
       </div>
 
-      <div className="flex gap-2 border-b border-slate-700">
+      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700">
         {(
           [
             ["card", "Карточка"],
@@ -306,7 +306,7 @@ export default function ClientDetailsPage() {
             className={`px-4 py-2 -mb-px border-b-2 transition-colors ${
               tab === key
                 ? "border-brandBlue-600 text-brandBlue-300"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             }`}
           >
             {label}
@@ -315,63 +315,63 @@ export default function ClientDetailsPage() {
       </div>
 
       {tab === "card" && (
-        <div className="rounded-xl border border-brandBlue-800/40 bg-slate-800/25 shadow-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-700 bg-slate-900/40">
-            <h2 className="text-sm font-semibold text-slate-200">Карточка клиента</h2>
-            <p className="text-xs text-slate-500 mt-0.5">ФИО, телефон, email и комментарий — одним сохранением.</p>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-brandBlue-800/40 dark:bg-slate-800/25 dark:shadow-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40">
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Карточка клиента</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">ФИО, телефон, email и комментарий — одним сохранением.</p>
           </div>
           <div className="p-4 md:p-6 grid gap-4 md:grid-cols-2">
             {isEditing ? (
               <>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Имя</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Имя</label>
                   <input
                     value={edit.first_name}
                     onChange={(e) => setEdit((s) => ({ ...s, first_name: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Фамилия</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Фамилия</label>
                   <input
                     value={edit.last_name}
                     onChange={(e) => setEdit((s) => ({ ...s, last_name: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Телефон</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Телефон</label>
                   <input
                     value={edit.phone}
                     onChange={(e) => setEdit((s) => ({ ...s, phone: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Email</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Email</label>
                   <input
                     type="email"
                     value={edit.email}
                     onChange={(e) => setEdit((s) => ({ ...s, email: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm text-slate-400 mb-1">Комментарий к карточке</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Комментарий к карточке</label>
                   <textarea
                     value={edit.comment}
                     onChange={(e) => setEdit((s) => ({ ...s, comment: e.target.value }))}
                     rows={4}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-slate-100 placeholder:text-slate-600"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100 dark:placeholder:text-slate-600"
                     placeholder="Пожелания, особенности, договорённости…"
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm text-slate-400 mb-1">Теги (через запятую)</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Теги (через запятую)</label>
                   <input
                     value={edit.tags}
                     onChange={(e) => setEdit((s) => ({ ...s, tags: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"
                     placeholder="vip, повторный, b2b"
                   />
                 </div>
@@ -387,7 +387,7 @@ export default function ClientDetailsPage() {
                   <button
                     type="button"
                     onClick={() => setIsEditing(false)}
-                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+                    className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white"
                   >
                     Отмена
                   </button>
@@ -401,40 +401,40 @@ export default function ClientDetailsPage() {
             ) : (
               <>
                 <div className="md:col-span-2 grid sm:grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/80 dark:bg-slate-900/30">
                     <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">ФИО</div>
-                    <div className="text-lg text-slate-100 font-medium">
+                    <div className="text-lg text-slate-900 dark:text-slate-100 font-medium">
                       {client.last_name} {client.first_name}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/80 dark:bg-slate-900/30">
                     <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Телефон</div>
-                    <div className="text-lg text-slate-100 font-mono">{client.phone}</div>
+                    <div className="text-lg text-slate-900 dark:text-slate-100 font-mono">{client.phone}</div>
                   </div>
-                  <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3 sm:col-span-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 sm:col-span-2 dark:border-slate-700/80 dark:bg-slate-900/30">
                     <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Email</div>
-                    <div className="text-slate-200">{client.email || "—"}</div>
+                    <div className="text-slate-700 dark:text-slate-200">{client.email || "—"}</div>
                   </div>
                 </div>
-                <div className="md:col-span-2 rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/80 dark:bg-slate-900/30">
                   <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Комментарий</div>
-                  <p className="text-slate-300 whitespace-pre-wrap min-h-[3rem]">
+                  <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap min-h-[3rem]">
                     {client.comment?.trim() ? client.comment : "Комментарий не заполнен — нажмите «Редактировать карточку»."}
                   </p>
                 </div>
-                <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/80 dark:bg-slate-900/30">
                   <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Источник</div>
-                  <div className="text-slate-200">{client.source}</div>
+                  <div className="text-slate-700 dark:text-slate-200">{client.source}</div>
                 </div>
-                <div className="rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/80 dark:bg-slate-900/30">
                   <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Теги</div>
-                  <div className="text-slate-200">{client.tags?.length ? client.tags.join(", ") : "—"}</div>
+                  <div className="text-slate-700 dark:text-slate-200">{client.tags?.length ? client.tags.join(", ") : "—"}</div>
                 </div>
                 {client.company && (
-                  <div className="md:col-span-2 rounded-lg border border-slate-700/80 bg-slate-900/30 p-3">
+                  <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/80 dark:bg-slate-900/30">
                     <div className="text-xs uppercase text-slate-500 tracking-wide mb-1">Компания</div>
                     <Link
-                      className="text-brandBlue-300 hover:underline font-medium"
+                      className="text-brandBlue-700 dark:text-brandBlue-300 hover:underline font-medium"
                       href={`/dashboard/companies/${client.company.id}`}
                     >
                       {client.company.name}
@@ -456,9 +456,9 @@ export default function ClientDetailsPage() {
       )}
 
       {tab === "orders" && (
-        <div className="rounded-xl border border-slate-700 overflow-hidden">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <table className="w-full">
-            <thead className="bg-slate-800/50">
+            <thead className="bg-slate-100 dark:bg-slate-800/50">
               <tr>
                 <th className="text-left p-4">Номер</th>
                 <th className="text-left p-4">Период</th>
@@ -469,9 +469,9 @@ export default function ClientDetailsPage() {
             </thead>
             <tbody>
               {(orders?.items ?? []).map((o) => (
-                <tr key={o.id} className="border-t border-slate-700 hover:bg-slate-800/30">
+                <tr key={o.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/30">
                   <td className="p-4">
-                    <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/orders/${o.id}`}>
+                    <Link className="text-brandBlue-700 dark:text-brandBlue-300 hover:underline" href={`/dashboard/orders/${o.id}`}>
                       {o.number}
                     </Link>
                   </td>
@@ -482,7 +482,7 @@ export default function ClientDetailsPage() {
                 </tr>
               ))}
               {(!orders?.items || orders.items.length === 0) && (
-                <tr className="border-t border-slate-700">
+                <tr className="border-t border-slate-200 dark:border-slate-700">
                   <td className="p-4 text-slate-500" colSpan={5}>Заказов нет</td>
                 </tr>
               )}
@@ -492,9 +492,9 @@ export default function ClientDetailsPage() {
       )}
 
       {tab === "payments" && (
-        <div className="rounded-xl border border-slate-700 overflow-hidden">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           <table className="w-full">
-            <thead className="bg-slate-800/50">
+            <thead className="bg-slate-100 dark:bg-slate-800/50">
               <tr>
                 <th className="text-left p-4">Дата</th>
                 <th className="text-left p-4">Сумма</th>
@@ -505,7 +505,7 @@ export default function ClientDetailsPage() {
             </thead>
             <tbody>
               {(paymentsByOrders ?? []).map((p) => (
-                <tr key={p.id} className="border-t border-slate-700">
+                <tr key={p.id} className="border-t border-slate-200 dark:border-slate-700">
                   <td className="p-4">
                     {p.paid_at ? new Date(p.paid_at).toLocaleString("ru") : "—"}
                   </td>
@@ -513,23 +513,23 @@ export default function ClientDetailsPage() {
                   <td className="p-4">{PAYMENT_METHOD_LABELS[p.method] ?? p.method}</td>
                   <td className="p-4">{PAYMENT_STATUS_LABELS[p.status] ?? p.status}</td>
                   <td className="p-4">
-                    <Link className="text-brandBlue-300 hover:underline" href={`/dashboard/orders/${p.deal_id}`}>
+                    <Link className="text-brandBlue-700 dark:text-brandBlue-300 hover:underline" href={`/dashboard/orders/${p.deal_id}`}>
                       {orderNumberById[p.deal_id] ?? p.deal_id.slice(0, 8) + "…"}
                     </Link>
                   </td>
                 </tr>
               ))}
               {(!paymentsByOrders || paymentsByOrders.length === 0) && (
-                <tr className="border-t border-slate-700">
+                <tr className="border-t border-slate-200 dark:border-slate-700">
                   <td className="p-4 text-slate-500" colSpan={5}>Оплат пока нет</td>
                 </tr>
               )}
             </tbody>
           </table>
           {(paymentsByOrders?.length ?? 0) > 0 && (
-            <div className="px-4 py-2 text-sm text-slate-400 border-t border-slate-700">
+            <div className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
               Сумма по списку платежей:{" "}
-              <span className="text-slate-200 font-medium">
+              <span className="text-slate-800 dark:text-slate-200 font-medium">
                 {paymentsListSum.toLocaleString("ru")} BYN
               </span>
             </div>
@@ -538,13 +538,13 @@ export default function ClientDetailsPage() {
       )}
 
       {tab === "calls" && (
-        <div className="rounded-xl border border-slate-700 overflow-hidden">
-          <p className="text-slate-500 text-sm p-4 border-b border-slate-700">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <p className="text-slate-600 dark:text-slate-500 text-sm p-4 border-b border-slate-200 dark:border-slate-700">
             Входящие звонки с АТС: для каждого события создаётся заявка с источником «телефония».
             Записи разговоров и длительность появятся после подключения провайдера.
           </p>
           <table className="w-full">
-            <thead className="bg-slate-800/50">
+            <thead className="bg-slate-100 dark:bg-slate-800/50">
               <tr>
                 <th className="text-left p-4">Дата</th>
                 <th className="text-left p-4">Статус заявки</th>
@@ -556,7 +556,7 @@ export default function ClientDetailsPage() {
             </thead>
             <tbody>
               {(callEvents ?? []).map((c) => (
-                <tr key={c.id} className="border-t border-slate-700 hover:bg-slate-800/30">
+                <tr key={c.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/30">
                   <td className="p-4 whitespace-nowrap text-sm">
                     {new Date(c.created_at).toLocaleString("ru")}
                   </td>
@@ -565,7 +565,7 @@ export default function ClientDetailsPage() {
                   <td className="p-4">
                     {c.converted_deal_id ? (
                       <Link
-                        className="text-brandBlue-300 hover:underline"
+                        className="text-brandBlue-700 dark:text-brandBlue-300 hover:underline"
                         href={`/dashboard/orders/${c.converted_deal_id}`}
                       >
                         {orderNumberById[c.converted_deal_id] ?? c.converted_deal_id.slice(0, 8) + "…"}
@@ -574,13 +574,13 @@ export default function ClientDetailsPage() {
                       "—"
                     )}
                   </td>
-                  <td className="p-4 text-sm text-slate-300 max-w-xs break-words">
+                  <td className="p-4 text-sm text-slate-700 dark:text-slate-300 max-w-xs break-words">
                     {c.comment ?? "—"}
                   </td>
                   <td className="p-4 text-sm">
                     {c.recording_url ? (
                       <a
-                        className="text-brandBlue-300 hover:underline"
+                        className="text-brandBlue-700 dark:text-brandBlue-300 hover:underline"
                         href={c.recording_url}
                         target="_blank"
                         rel="noreferrer"
@@ -594,7 +594,7 @@ export default function ClientDetailsPage() {
                 </tr>
               ))}
               {(!callEvents || callEvents.length === 0) && (
-                <tr className="border-t border-slate-700">
+                <tr className="border-t border-slate-200 dark:border-slate-700">
                   <td className="p-4 text-slate-500" colSpan={6}>
                     Звонков по этому клиенту пока нет. После настройки webhook телефонии события появятся
                     автоматически.
@@ -607,12 +607,12 @@ export default function ClientDetailsPage() {
       )}
 
       {tab === "history" && (
-        <div className="rounded-xl border border-slate-700 overflow-hidden">
-          <p className="text-slate-500 text-sm p-4 border-b border-slate-700">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <p className="text-slate-600 dark:text-slate-500 text-sm p-4 border-b border-slate-200 dark:border-slate-700">
             Создание карточки и сохранённые изменения полей (журнал аудита).
           </p>
           <table className="w-full">
-            <thead className="bg-slate-800/50">
+            <thead className="bg-slate-100 dark:bg-slate-800/50">
               <tr>
                 <th className="text-left p-4">Дата</th>
                 <th className="text-left p-4">Действие</th>
@@ -622,17 +622,17 @@ export default function ClientDetailsPage() {
             </thead>
             <tbody>
               {(auditTrail ?? []).map((a) => (
-                <tr key={a.id} className="border-t border-slate-700 hover:bg-slate-800/30">
+                <tr key={a.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/30">
                   <td className="p-4 whitespace-nowrap text-sm">
                     {new Date(a.created_at).toLocaleString("ru")}
                   </td>
                   <td className="p-4">{AUDIT_ACTION_LABELS[a.action] ?? a.action}</td>
                   <td className="p-4 text-sm">{a.user_name}</td>
-                  <td className="p-4 text-sm text-slate-300 break-words max-w-md">{a.details}</td>
+                  <td className="p-4 text-sm text-slate-700 dark:text-slate-300 break-words max-w-md">{a.details}</td>
                 </tr>
               ))}
               {(!auditTrail || auditTrail.length === 0) && (
-                <tr className="border-t border-slate-700">
+                <tr className="border-t border-slate-200 dark:border-slate-700">
                   <td className="p-4 text-slate-500" colSpan={4}>
                     Записей пока нет (появятся после создания карточки или правок).
                   </td>
@@ -645,13 +645,13 @@ export default function ClientDetailsPage() {
 
       {tab === "notes" && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
-            <label className="block text-sm text-slate-400 mb-1">Добавить заметку</label>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/30">
+            <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Добавить заметку</label>
             <div className="flex gap-2">
               <input
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                className="flex-1 px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100"
                 placeholder="Текст заметки"
               />
               <button
@@ -664,9 +664,9 @@ export default function ClientDetailsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-700 overflow-hidden">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
             <table className="w-full">
-              <thead className="bg-slate-800/50">
+              <thead className="bg-slate-100 dark:bg-slate-800/50">
                 <tr>
                   <th className="text-left p-4">Дата</th>
                   <th className="text-left p-4">Текст</th>
@@ -674,13 +674,13 @@ export default function ClientDetailsPage() {
               </thead>
               <tbody>
                 {(notes ?? []).map((n) => (
-                  <tr key={n.id} className="border-t border-slate-700">
+                  <tr key={n.id} className="border-t border-slate-200 dark:border-slate-700">
                     <td className="p-4">{new Date(n.created_at).toLocaleString("ru")}</td>
                     <td className="p-4">{n.text}</td>
                   </tr>
                 ))}
                 {(!notes || notes.length === 0) && (
-                  <tr className="border-t border-slate-700">
+                  <tr className="border-t border-slate-200 dark:border-slate-700">
                     <td className="p-4 text-slate-500" colSpan={2}>Заметок нет</td>
                   </tr>
                 )}
