@@ -25,7 +25,7 @@ router = APIRouter(prefix="/hostel", tags=["hostel"])
 async def list_rooms(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    current_user=require_permission("orders", "read"),
+    current_user=require_permission("bookings", "read"),
     db: AsyncSession = Depends(get_db),
 ):
     repo = HostelRoomRepository(db)
@@ -35,7 +35,7 @@ async def list_rooms(
 @router.post("/rooms", response_model=HostelRoomResponse, status_code=201)
 async def create_room(
     data: HostelRoomCreate,
-    current_user=require_permission("orders", "write"),
+    current_user=require_permission("bookings", "write"),
     db: AsyncSession = Depends(get_db),
 ):
     repo = HostelRoomRepository(db)
@@ -55,7 +55,7 @@ async def create_room(
 async def update_room(
     room_id: UUID,
     data: HostelRoomUpdate,
-    current_user=require_permission("orders", "write"),
+    current_user=require_permission("bookings", "write"),
     db: AsyncSession = Depends(get_db),
 ):
     repo = HostelRoomRepository(db)

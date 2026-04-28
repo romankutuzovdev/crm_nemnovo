@@ -1479,7 +1479,7 @@ export default function Calendar() {
   }, [getToken]);
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-4 border-b border-slate-700 shrink-0">
         <div className="min-w-0 space-y-1">
           <h1 className="text-xl font-bold">Календарь заказов</h1>

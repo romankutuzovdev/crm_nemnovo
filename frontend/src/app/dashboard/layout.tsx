@@ -54,6 +54,7 @@ export default function DashboardLayout({
     href === "/dashboard"
       ? pathname === "/dashboard"
       : pathname === href || pathname.startsWith(`${href}/`);
+  const isCalendarRoute = pathname === "/dashboard/calendar";
 
   const nav = [
     { href: "/dashboard", label: "Главная" },
@@ -115,11 +116,13 @@ export default function DashboardLayout({
         </div>
       </aside>
       <main
-        className={`flex-1 overflow-auto bg-bg ${
-          pathname === "/dashboard/calendar" ? "p-0" : "p-6"
+        className={`flex-1 bg-bg ${
+          isCalendarRoute ? "overflow-hidden p-0" : "overflow-auto p-6"
         }`}
       >
-        <PageTransition routeKey={pathname}>{children}</PageTransition>
+        <PageTransition routeKey={pathname} className={isCalendarRoute ? "h-full" : undefined}>
+          {children}
+        </PageTransition>
       </main>
     </div>
   );

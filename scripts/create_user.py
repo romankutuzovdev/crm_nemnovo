@@ -42,19 +42,26 @@ async def create_user(email: str, password: str, full_name: str = "Пользо�
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session() as session:
-        result = await session.execute(select(User).where(User.email == email))
-        if result.scalar_one_or_none():
-            print(f"Пользователь {email} уже существует")
-            await engine.dispose()
-            return
-
         result = await session.execute(select(Role).where(Role.name == role_name))
         role = result.scalar_one_or_none()
         if not role:
-            result = await session.execute(select(Role).limit(1))
-            role = result.scalar_one_or_none()
-        if not role:
-            print("Ошибка: нет ролей в БД. Сначала выполните: python scripts/seed.py")
+            role = Role(name=role_name, permissions={})
+            session.add(role)
+            await session.flush()
+            print(f"Создана роль: {role_name}")
+
+        result = await session.execute(select(User).where(User.email == email))
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.full_name = full_name
+            existing.hashed_password = hash_password(password)
+            existing.role_id = role.id
+            if not existing.is_active:
+                existing.is_active = True
+            await session.commit()
+            print(f"Пользователь {email} уже существовал — пароль и роль обновлены")
+            print(f"  Логин:  {email}")
+            print(f"  Пароль: {password}")
             await engine.dispose()
             return
 

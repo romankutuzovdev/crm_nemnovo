@@ -49,6 +49,15 @@ export default function CompaniesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    if (!showCreate) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showCreate]);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["companies", debouncedSearch],
     queryFn: () =>
@@ -156,8 +165,8 @@ export default function CompaniesPage() {
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h2 className="text-lg font-semibold mb-4">Новая компания</h2>
             <div className="space-y-3">
               <div>
