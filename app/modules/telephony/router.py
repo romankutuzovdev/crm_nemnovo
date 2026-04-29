@@ -1,15 +1,124 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.telephony.schemas import (
+    MtsVatsImportResponse,
     MtsVatsHistoryResponse,
     TelephonyCallRow,
     TelephonyWebhookEventRow,
 )
 
 router = APIRouter(prefix="/telephony", tags=["telephony"])
+
+
+def _pick_payload_value(payload: dict, *keys: str):
+    for key in keys:
+        v = payload.get(key)
+        if v not in (None, ""):
+            return v
+    return None
+
+
+async def _fetch_mts_history_sample(
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> tuple[dict | list | str | None, str | None, int | None, list[str]]:
+    import httpx
+
+    from app.core.config import settings
+
+    base = (settings.MTS_VATS_API_BASE_URL or "").strip().rstrip("/")
+    key = (settings.MTS_VATS_API_KEY or "").strip()
+    if not base or not key:
+        return None, None, None, []
+
+    df = date_from or (date.today() - timedelta(days=7))
+    dt = date_to or date.today()
+
+    paths = [
+        "/calls",
+        "/calls/list",
+        "/call/list",
+        "/cdr",
+        "/cdr/list",
+        "/history",
+        "/events",
+    ]
+    header_variants = [
+        {"Authorization": key},
+        {"Authorization": f"Bearer {key}"},
+        {"Authorization": f"Token {key}"},
+        {"X-API-Key": key},
+        {"X-Auth-Token": key},
+        {"X-Token": key},
+        {"X-MTS-Token": key},
+        {"X-MTS-Auth": key},
+        {"X-Access-Token": key},
+    ]
+    query_variants = [
+        {},
+        {"token": key},
+        {"access_token": key},
+        {"key": key},
+        {"api_key": key},
+    ]
+    date_range_variants = [
+        {"date_from": df.isoformat(), "date_to": dt.isoformat()},
+        {"from": df.isoformat(), "to": dt.isoformat()},
+        {"start": df.isoformat(), "end": dt.isoformat()},
+        {"start_date": df.isoformat(), "end_date": dt.isoformat()},
+        {"period_from": df.isoformat(), "period_to": dt.isoformat()},
+    ]
+    tried: list[str] = []
+
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        for p in paths:
+            url = f"{base}{p}"
+            for dr in date_range_variants:
+                for q in query_variants:
+                    params = dict(dr)
+                    params.update(q or {})
+                    for h in header_variants:
+                        label = (
+                            f"GET {p} headers={','.join(h.keys())}"
+                            + (f" query={','.join(params.keys())}" if params else "")
+                        )
+                        tried.append(label)
+                        r = await client.get(url, headers=h, params=params or None)
+                        text = (r.text or "").strip()
+                        if r.status_code in (400, 401) and ("Empty token" in text or "Invalid token" in text):
+                            continue
+                        if r.status_code >= 400:
+                            continue
+                        try:
+                            data = r.json()
+                        except Exception:
+                            data = text[:2000]
+                        return data, p, r.status_code, tried
+    return None, None, None, tried
+
+
+def _extract_history_rows(sample: dict | list | str | None) -> list[dict]:
+    if isinstance(sample, list):
+        return [x for x in sample if isinstance(x, dict)]
+    if not isinstance(sample, dict):
+        return []
+    candidates = [
+        sample.get("items"),
+        sample.get("calls"),
+        sample.get("data"),
+        sample.get("results"),
+        sample.get("history"),
+        sample.get("records"),
+    ]
+    for c in candidates:
+        if isinstance(c, list):
+            return [x for x in c if isinstance(x, dict)]
+    return []
 
 
 @router.get("/calls", response_model=list[TelephonyCallRow])
@@ -129,8 +238,6 @@ async def fetch_mts_vats_history(
     Попытка получить историю звонков напрямую из MTS VATS CRM API.
     Пока реализовано как "probe": пробуем несколько типовых путей и вариантов передачи ключа.
     """
-    import httpx
-
     from app.core.config import settings
 
     base = (settings.MTS_VATS_API_BASE_URL or "").strip()
@@ -140,120 +247,82 @@ async def fetch_mts_vats_history(
     if not key:
         return MtsVatsHistoryResponse(ok=False, message="Не задан MTS_VATS_API_KEY в .env")
 
-    base = base.rstrip("/")
-    paths = [
-        "/calls",
-        "/calls/list",
-        "/call/list",
-        "/cdr",
-        "/cdr/list",
-        "/history",
-        "/events",
-    ]
-    header_variants = [
-        {"Authorization": key},
-        {"Authorization": f"Bearer {key}"},
-        {"Authorization": f"Token {key}"},
-        {"X-API-Key": key},
-        {"X-Auth-Token": key},
-        {"X-Token": key},
-        {"X-MTS-Token": key},
-        {"X-MTS-Auth": key},
-        {"X-Access-Token": key},
-    ]
-    query_variants = [
-        {},
-        # token in query (some installations use query auth)
-        {"token": key},
-        {"access_token": key},
-        {"key": key},
-        {"api_key": key},
-    ]
-
-    # Some endpoints require an explicit date range; try a few common parameter names.
-    from datetime import date, timedelta
-
-    today = date.today()
-    week_ago = today - timedelta(days=7)
-    date_range_variants = [
-        {"date_from": week_ago.isoformat(), "date_to": today.isoformat()},
-        {"from": week_ago.isoformat(), "to": today.isoformat()},
-        {"start": week_ago.isoformat(), "end": today.isoformat()},
-        {"start_date": week_ago.isoformat(), "end_date": today.isoformat()},
-        {"period_from": week_ago.isoformat(), "period_to": today.isoformat()},
-    ]
-
-    tried: list[str] = []
-    last_attempt: str | None = None
-    last_status: int | None = None
-    last_sample: dict | list | str | None = None
-    timeout = 15.0
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        for p in paths:
-            url = f"{base}{p}"
-            for dr in date_range_variants:
-                for q in query_variants:
-                    params = dict(dr)
-                    params.update(q or {})
-                    for h in header_variants:
-                        label = (
-                            f"GET {p} headers={','.join(h.keys())}"
-                            + (f" query={','.join(params.keys())}" if params else "")
-                        )
-                        tried.append(label)
-                        try:
-                            r = await client.get(url, headers=h, params=params or None)
-                        except Exception as e:
-                            return MtsVatsHistoryResponse(ok=False, message=f"Ошибка сети: {e}", tried=tried)
-
-                        # "Empty token" / "Invalid token" — частые ошибки авторизации; продолжаем перебор.
-                        text = (r.text or "").strip()
-                        if r.status_code in (400, 401) and ("Empty token" in text or "Invalid token" in text):
-                            last_attempt = label
-                            last_status = r.status_code
-                            try:
-                                last_sample = r.json()
-                            except Exception:
-                                last_sample = text[:1000]
-                            continue
-                        if r.status_code >= 400:
-                            # Если это уже другая ошибка — вернём её как подсказку.
-                            sample = None
-                            try:
-                                sample = r.json()
-                            except Exception:
-                                sample = text[:1000]
-                            return MtsVatsHistoryResponse(
-                                ok=False,
-                                message=f"MTS API вернул ошибку {r.status_code}",
-                                tried=tried,
-                                status_code=r.status_code,
-                                sample=sample,
-                                last_attempt=label,
-                            )
-
-                        # success
-                        try:
-                            data = r.json()
-                        except Exception:
-                            data = text[:2000]
-                        return MtsVatsHistoryResponse(
-                            ok=True,
-                            message=f"OK ({p})",
-                            tried=tried,
-                            status_code=r.status_code,
-                            sample=data,
-                            last_attempt=label,
-                        )
-
-    if last_status is not None:
+    sample, path, status_code, tried = await _fetch_mts_history_sample()
+    if sample is None:
         return MtsVatsHistoryResponse(
             ok=False,
-            message="MTS API не принял токен (Empty token / Invalid token).",
+            message="Не удалось получить ответ от MTS API.",
             tried=tried,
-            status_code=last_status,
-            sample=last_sample,
-            last_attempt=last_attempt,
+            status_code=status_code,
+            sample=sample,
+            last_attempt=None,
         )
-    return MtsVatsHistoryResponse(ok=False, message="Не удалось получить ответ от MTS API.", tried=tried)
+    return MtsVatsHistoryResponse(
+        ok=True,
+        message=f"OK ({path})",
+        tried=tried,
+        status_code=status_code,
+        sample=sample,
+        last_attempt=path,
+    )
+
+
+@router.post("/mts/import-history", response_model=MtsVatsImportResponse)
+async def import_mts_vats_history(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    current_user=require_permission("integrations", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Импортировать историю звонков из MTS VATS API в CRM (лиды + клиенты телефонии).
+    """
+    from app.modules.integrations.service import IntegrationService
+
+    sample, path, _status_code, _tried = await _fetch_mts_history_sample(date_from=date_from, date_to=date_to)
+    rows = _extract_history_rows(sample)
+    if not rows:
+        return MtsVatsImportResponse(
+            ok=False,
+            message="История не найдена или формат ответа MTS не распознан",
+            source_path=path,
+        )
+
+    service = IntegrationService(db)
+    imported = 0
+    skipped = 0
+    for row in rows:
+        direction = _pick_payload_value(row, "direction", "call_direction")
+        if isinstance(direction, str) and direction.lower() not in {"in", "incoming", "inbound"}:
+            skipped += 1
+            continue
+
+        caller_phone = _pick_payload_value(
+            row, "caller_id", "caller", "from", "from_number", "ani", "external_number", "phone"
+        )
+        if not caller_phone and isinstance(row.get("call"), dict):
+            caller_phone = _pick_payload_value(row.get("call", {}), "from", "caller", "phone")
+        if not caller_phone:
+            skipped += 1
+            continue
+
+        mapped = {
+            "caller_id": str(caller_phone),
+            "call_id": _pick_payload_value(row, "call_id", "callId", "callid", "session_id", "sessionId", "uuid", "id"),
+            "event": _pick_payload_value(row, "event", "type", "event_type", "call_event"),
+            "direction": direction,
+            "comment": _pick_payload_value(row, "status", "state", "event"),
+            "raw_payload": dict(row),
+        }
+        await service._process_telephony_payload(mapped, str(caller_phone))
+        imported += 1
+
+    return MtsVatsImportResponse(
+        ok=True,
+        message="Импорт завершён",
+        imported=imported,
+        skipped=skipped,
+        total_seen=len(rows),
+        source_path=path,
+    )
 

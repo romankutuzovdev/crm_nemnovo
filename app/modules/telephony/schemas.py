@@ -37,3 +37,11 @@ class MtsVatsHistoryResponse(BaseSchema):
     sample: dict | list | str | None = None
     last_attempt: str | None = None
 
+
+class MtsVatsImportResponse(BaseSchema):
+    ok: bool
+    message: str
+    imported: int = 0
+    skipped: int = 0
+    total_seen: int = 0
+    source_path: str | None = None

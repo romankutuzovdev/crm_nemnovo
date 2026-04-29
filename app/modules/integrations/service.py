@@ -67,14 +67,12 @@ class IntegrationService:
             raise
 
     async def _process_telephony_payload(self, payload: dict, caller_phone: str) -> dict:
-        # Find existing client by phone
+        # Telephony rule: each new call creates a separate client card.
         from app.modules.clients.repository import ClientRepository
         from app.shared.utils import normalize_phone
         from app.shared.enums import LeadSource, LeadStatus
 
         normalized_phone = normalize_phone(caller_phone)
-        client_repo = ClientRepository(self.session)
-        client = await client_repo.find_by_phone(normalized_phone)
 
         from app.modules.leads.repository import LeadRepository
         lead_repo = LeadRepository(self.session)
@@ -94,7 +92,6 @@ class IntegrationService:
             )
             if existing:
                 # Update existing lead (avoid duplicates for repeated telephony events)
-                existing.client_id = existing.client_id or (client.id if client else None)
                 if telephony_comment:
                     existing.comment = str(telephony_comment)
                 existing.raw_payload = payload_for_storage
@@ -102,11 +99,20 @@ class IntegrationService:
                 return {
                     "status": "ok",
                     "lead_id": str(existing.id),
-                    "client_found": client is not None,
+                    "client_found": existing.client_id is not None,
                 }
 
+        client_repo = ClientRepository(self.session)
+        client = await client_repo.create(
+            first_name="Телефон",
+            last_name="Звонок",
+            phone=normalized_phone,
+            email=None,
+            source=LeadSource.TELEPHONY.value,
+        )
+
         lead = await lead_repo.create(
-            client_id=client.id if client else None,
+            client_id=client.id,
             source=LeadSource.TELEPHONY,
             source_ref=call_id,
             status=LeadStatus.NEW,
@@ -115,7 +121,7 @@ class IntegrationService:
             assigned_to=assignee,
         )
 
-        return {"status": "ok", "lead_id": str(lead.id), "client_found": client is not None}
+        return {"status": "ok", "lead_id": str(lead.id), "client_found": True}
 
     @staticmethod
     def _pick(payload: dict, *keys: str):

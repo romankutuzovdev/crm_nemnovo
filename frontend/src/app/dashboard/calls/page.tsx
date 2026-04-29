@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -37,6 +37,15 @@ interface MtsHistoryResponse {
   sample: any;
 }
 
+interface MtsImportResponse {
+  ok: boolean;
+  message: string;
+  imported: number;
+  skipped: number;
+  total_seen: number;
+  source_path: string | null;
+}
+
 const LEAD_STATUS_LABELS: Record<string, string> = {
   new: "Новая",
   in_progress: "В работе",
@@ -47,6 +56,7 @@ const LEAD_STATUS_LABELS: Record<string, string> = {
 export default function CallsPage() {
   const getToken = useAuthStore((s) => s.getToken);
   const token = getToken() ?? undefined;
+  const queryClient = useQueryClient();
 
   const { data: calls = [], isFetching, error } = useQuery({
     queryKey: ["calls", "telephony"],
@@ -67,6 +77,14 @@ export default function CallsPage() {
     retry: false,
   });
 
+  const importHistory = useMutation({
+    mutationFn: () => apiFetch<MtsImportResponse>("/telephony/mts/import-history", { method: "POST", token }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["calls", "telephony"] });
+      await queryClient.invalidateQueries({ queryKey: ["calls", "telephony", "events"] });
+    },
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -76,10 +94,30 @@ export default function CallsPage() {
             Список звонков, которые уже попали в CRM (источник: телефония). Получение новых событий сюда не входит.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => importHistory.mutate()}
+          disabled={importHistory.isPending}
+          className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium disabled:opacity-50"
+        >
+          {importHistory.isPending ? "Импорт…" : "Импортировать историю MTS"}
+        </button>
         {isFetching || eventsFetching || mtsFetching ? (
           <span className="text-xs text-text-secondary pt-2">Загрузка…</span>
         ) : null}
       </div>
+
+      {importHistory.isSuccess && importHistory.data ? (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+          {importHistory.data.message}: импортировано {importHistory.data.imported} из {importHistory.data.total_seen},
+          пропущено {importHistory.data.skipped}.
+        </div>
+      ) : null}
+      {importHistory.isError ? (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
+          {importHistory.error instanceof Error ? importHistory.error.message : "Ошибка импорта"}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-border bg-surface p-4 text-sm text-error">

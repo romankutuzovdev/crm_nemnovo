@@ -43,7 +43,7 @@ class Client(Base):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
-    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     company_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
     )
