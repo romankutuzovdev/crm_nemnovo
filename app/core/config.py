@@ -66,6 +66,16 @@ class Settings(BaseSettings):
             return json.loads(v)
         return v
 
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str, info) -> str:
+        app_env = str((info.data or {}).get("APP_ENV", "development")).lower()
+        if app_env == "production" and "sqlite" in v.lower():
+            raise ValueError(
+                "SQLite запрещен в production. Укажите persistent PostgreSQL DATABASE_URL."
+            )
+        return v
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"

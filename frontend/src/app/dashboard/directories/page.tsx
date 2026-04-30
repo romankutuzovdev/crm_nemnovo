@@ -193,6 +193,15 @@ export default function DirectoriesPage() {
     () => !!assetForm.category_id && !!assetForm.name.trim() && !!assetForm.code.trim(),
     [assetForm.category_id, assetForm.name, assetForm.code],
   );
+  const visibleTransports = useMemo(() => transports.filter((item) => item.is_active), [transports]);
+  const visibleInstructors = useMemo(() => instructors.filter((item) => item.is_active), [instructors]);
+  const visibleGuides = useMemo(() => guides.filter((item) => item.is_active), [guides]);
+  const visibleRooms = useMemo(() => rooms.filter((item) => item.is_active), [rooms]);
+  const visibleRoutes = useMemo(() => routes.filter((item) => item.is_active), [routes]);
+  const visibleAssets = useMemo(
+    () => assets.filter((item) => String(item.status).toLowerCase() !== "retired"),
+    [assets],
+  );
 
   const createTransport = useMutation({
     mutationFn: () =>
@@ -361,6 +370,72 @@ export default function DirectoriesPage() {
       await queryClient.invalidateQueries({ queryKey: ["directories", "asset-categories"] });
     },
   });
+  const deleteTransport = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/rafting/transport/${id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ is_active: false }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["directories", "transport"] });
+    },
+  });
+  const deleteInstructor = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/rafting/instructors/${id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ is_active: false }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["directories", "instructors"] });
+    },
+  });
+  const deleteGuide = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/excursions/guides/${id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ is_active: false }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["directories", "guides"] });
+    },
+  });
+  const deleteRoom = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/hostel/rooms/${id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ is_active: false }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["directories", "rooms"] });
+    },
+  });
+  const deleteRoute = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/rafting/routes/${id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ is_active: false }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["directories", "routes"] });
+    },
+  });
+  const deleteAsset = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/assets/${id}/status`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ status: "retired" }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["directories", "assets"] });
+    },
+  });
 
   return (
     <div className="space-y-4">
@@ -391,17 +466,21 @@ export default function DirectoriesPage() {
                 <th className="text-left p-2">Номер</th>
                 <th className="text-left p-2">Мест</th>
                 <th className="text-left p-2">Рейс</th>
-                <th className="text-left p-2">Статус</th>
+                <th className="text-left p-2">Действия</th>
               </tr>
             </thead>
             <tbody>
-              {transports.map((item) => (
+              {visibleTransports.map((item) => (
                 <tr key={item.id} className="border-t border-slate-700">
                   <td className="p-2">{[item.brand, item.model].filter(Boolean).join(" ")}</td>
                   <td className="p-2">{item.plate_number || "-"}</td>
                   <td className="p-2">{item.seats ?? "-"}</td>
                   <td className="p-2">{item.trip_cost ?? "-"}</td>
-                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                  <td className="p-2">
+                    <button className="rounded-md border border-red-500/50 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10" onClick={() => deleteTransport.mutate(item.id)}>
+                      Удалить
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -428,17 +507,21 @@ export default function DirectoriesPage() {
                 <th className="text-left p-2">Телефон</th>
                 <th className="text-left p-2">За выезд</th>
                 <th className="text-left p-2">За гостя</th>
-                <th className="text-left p-2">Статус</th>
+                <th className="text-left p-2">Действия</th>
               </tr>
             </thead>
             <tbody>
-              {instructors.map((item) => (
+              {visibleInstructors.map((item) => (
                 <tr key={item.id} className="border-t border-slate-700">
                   <td className="p-2">{item.full_name}</td>
                   <td className="p-2">{item.phone || "-"}</td>
                   <td className="p-2">{item.payout_per_trip}</td>
                   <td className="p-2">{item.payout_per_guest}</td>
-                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                  <td className="p-2">
+                    <button className="rounded-md border border-red-500/50 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10" onClick={() => deleteInstructor.mutate(item.id)}>
+                      Удалить
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -460,15 +543,19 @@ export default function DirectoriesPage() {
               <tr>
                 <th className="text-left p-2">ФИО</th>
                 <th className="text-left p-2">Телефон</th>
-                <th className="text-left p-2">Статус</th>
+                <th className="text-left p-2">Действия</th>
               </tr>
             </thead>
             <tbody>
-              {guides.map((item) => (
+              {visibleGuides.map((item) => (
                 <tr key={item.id} className="border-t border-slate-700">
                   <td className="p-2">{item.full_name}</td>
                   <td className="p-2">{item.phone || "-"}</td>
-                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                  <td className="p-2">
+                    <button className="rounded-md border border-red-500/50 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10" onClick={() => deleteGuide.mutate(item.id)}>
+                      Удалить
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -496,17 +583,21 @@ export default function DirectoriesPage() {
                 <th className="text-left p-2">Название</th>
                 <th className="text-left p-2">Мест</th>
                 <th className="text-left p-2">Цена/ночь</th>
-                <th className="text-left p-2">Статус</th>
+                <th className="text-left p-2">Действия</th>
               </tr>
             </thead>
             <tbody>
-              {rooms.map((item) => (
+              {visibleRooms.map((item) => (
                 <tr key={item.id} className="border-t border-slate-700">
                   <td className="p-2">{item.code}</td>
                   <td className="p-2">{item.title || "-"}</td>
                   <td className="p-2">{item.capacity}</td>
                   <td className="p-2">{item.base_price_per_night ?? "-"}</td>
-                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                  <td className="p-2">
+                    <button className="rounded-md border border-red-500/50 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10" onClick={() => deleteRoom.mutate(item.id)}>
+                      Удалить
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -529,16 +620,20 @@ export default function DirectoriesPage() {
                 <th className="text-left p-2">Маршрут</th>
                 <th className="text-left p-2">Длительность</th>
                 <th className="text-left p-2">Цена</th>
-                <th className="text-left p-2">Статус</th>
+                <th className="text-left p-2">Действия</th>
               </tr>
             </thead>
             <tbody>
-              {routes.map((item) => (
+              {visibleRoutes.map((item) => (
                 <tr key={item.id} className="border-t border-slate-700">
                   <td className="p-2">{item.name}</td>
                   <td className="p-2">{item.duration_hours ?? "-"}</td>
                   <td className="p-2">{item.default_price_per_person ?? "-"}</td>
-                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                  <td className="p-2">
+                    <button className="rounded-md border border-red-500/50 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10" onClick={() => deleteRoute.mutate(item.id)}>
+                      Удалить
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -580,17 +675,21 @@ export default function DirectoriesPage() {
                 <th className="text-left p-2">Название</th>
                 <th className="text-left p-2">Код</th>
                 <th className="text-left p-2">Кол-во</th>
-                <th className="text-left p-2">Статус</th>
+                <th className="text-left p-2">Действия</th>
               </tr>
             </thead>
             <tbody>
-              {assets.map((item) => (
+              {visibleAssets.map((item) => (
                 <tr key={item.id} className="border-t border-slate-700">
                   <td className="p-2">{item.category.name}</td>
                   <td className="p-2">{item.name}</td>
                   <td className="p-2">{item.code}</td>
                   <td className="p-2">{item.quantity}</td>
-                  <td className="p-2">{item.status}</td>
+                  <td className="p-2">
+                    <button className="rounded-md border border-red-500/50 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10" onClick={() => deleteAsset.mutate(item.id)}>
+                      Удалить
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
