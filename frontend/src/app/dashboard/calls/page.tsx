@@ -194,7 +194,6 @@ export default function CallsPage() {
               <th className="text-left p-4">Статус</th>
               <th className="text-left p-4">ID звонка</th>
               <th className="text-left p-4">Комментарий</th>
-              <th className="text-left p-4">Запись</th>
             </tr>
           </thead>
           <tbody>
@@ -223,20 +222,11 @@ export default function CallsPage() {
                 </td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{c.call_id ?? "—"}</td>
                 <td className="p-4 text-text-secondary max-w-[26rem] break-words">{getCommentLabel(c.comment)}</td>
-                <td className="p-4">
-                  {c.recording_url ? (
-                    <a className="text-primary hover:underline" href={c.recording_url} target="_blank" rel="noreferrer">
-                      Открыть
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </td>
               </tr>
             ))}
             {calls.length === 0 ? (
               <tr className="border-t border-border">
-                <td className="p-4 text-text-secondary" colSpan={10}>
+                <td className="p-4 text-text-secondary" colSpan={9}>
                   Пока нет звонков (заявок с источником «телефония»). Ниже — сырые события webhook (если они приходили).
                 </td>
               </tr>
@@ -261,7 +251,6 @@ export default function CallsPage() {
               <th className="text-left p-4">ID звонка</th>
               <th className="text-left p-4">Статус</th>
               <th className="text-left p-4">Ошибка</th>
-              <th className="text-left p-4">Запись</th>
             </tr>
           </thead>
           <tbody>
@@ -279,20 +268,11 @@ export default function CallsPage() {
                   )}
                 </td>
                 <td className="p-4 text-error max-w-[18rem] break-words">{e.error ?? "—"}</td>
-                <td className="p-4">
-                  {e.recording_url ? (
-                    <a className="text-primary hover:underline" href={e.recording_url} target="_blank" rel="noreferrer">
-                      Открыть
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </td>
               </tr>
             ))}
             {events.length === 0 ? (
               <tr className="border-t border-border">
-                <td className="p-4 text-text-secondary" colSpan={7}>
+                <td className="p-4 text-text-secondary" colSpan={6}>
                   Событий webhook телефонии пока нет.
                 </td>
               </tr>

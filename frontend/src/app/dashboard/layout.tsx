@@ -27,6 +27,10 @@ function pickValue(obj: Record<string, unknown> | null | undefined, ...keys: str
   return null;
 }
 
+type DateProtoPatched = Date & {
+  __minskTimezonePatched?: boolean;
+};
+
 export default function DashboardLayout({
   children,
 }: {
@@ -54,6 +58,45 @@ export default function DashboardLayout({
       router.replace("/login");
     }
   }, [_hasHydrated, user, router]);
+
+  useEffect(() => {
+    const proto = Date.prototype as unknown as DateProtoPatched;
+    if (proto.__minskTimezonePatched) return;
+
+    const originalToLocaleString = Date.prototype.toLocaleString;
+    const originalToLocaleDateString = Date.prototype.toLocaleDateString;
+    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
+
+    Date.prototype.toLocaleString = function (
+      locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions,
+    ): string {
+      return originalToLocaleString.call(this, locales ?? "ru-RU", {
+        timeZone: "Europe/Minsk",
+        ...(options ?? {}),
+      });
+    };
+    Date.prototype.toLocaleDateString = function (
+      locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions,
+    ): string {
+      return originalToLocaleDateString.call(this, locales ?? "ru-RU", {
+        timeZone: "Europe/Minsk",
+        ...(options ?? {}),
+      });
+    };
+    Date.prototype.toLocaleTimeString = function (
+      locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions,
+    ): string {
+      return originalToLocaleTimeString.call(this, locales ?? "ru-RU", {
+        timeZone: "Europe/Minsk",
+        ...(options ?? {}),
+      });
+    };
+
+    proto.__minskTimezonePatched = true;
+  }, []);
 
   const handleLogout = async () => {
     const token = getToken();

@@ -39,6 +39,7 @@ export default function AssetsPage() {
     quantity: "1",
     description: "",
   });
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const { data: categories = [] } = useQuery({
     queryKey: ["asset-categories"],
@@ -107,6 +108,20 @@ export default function AssetsPage() {
     },
   });
 
+  const createCategory = useMutation({
+    mutationFn: () =>
+      apiFetch<AssetCategory>("/assets/categories", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ name: newCategoryName.trim() }),
+      }),
+    onSuccess: async (created) => {
+      setNewCategoryName("");
+      await queryClient.invalidateQueries({ queryKey: ["asset-categories"] });
+      setCreateForm((s) => ({ ...s, category_id: String(created.id) }));
+    },
+  });
+
   if (isLoading) return <div className="text-slate-500">Загрузка...</div>;
   if (error)
     return (
@@ -126,6 +141,27 @@ export default function AssetsPage() {
       </p>
       <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4 mb-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">Добавить актив</h2>
+        {categories.length === 0 && (
+          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <p className="text-sm text-amber-300 mb-2">Категории пока не созданы. Сначала добавьте категорию.</p>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"
+                placeholder="Новая категория (например: Транспорт)"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => createCategory.mutate()}
+                disabled={createCategory.isPending || !newCategoryName.trim()}
+                className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white"
+              >
+                {createCategory.isPending ? "..." : "Создать"}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           <select
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600"

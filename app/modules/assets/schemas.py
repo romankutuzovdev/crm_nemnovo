@@ -12,6 +12,11 @@ class AssetCategoryResponse(BaseSchema):
     name: str
 
 
+class AssetCategoryCreate(BaseSchema):
+    name: str
+    description: str | None = None
+
+
 class AssetCreate(BaseSchema):
     category_id: int
     name: str

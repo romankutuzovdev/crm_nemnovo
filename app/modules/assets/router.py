@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import require_permission
 from app.db.session import get_db
 from app.modules.assets.schemas import (
+    AssetCategoryCreate,
     AssetCategoryResponse,
     AssetAuditEntryResponse,
     AssetAvailabilityRequest,
@@ -39,6 +40,23 @@ async def list_asset_categories(
 ):
     result = await db.execute(select(AssetCategory).order_by(AssetCategory.name.asc()))
     return list(result.scalars().all())
+
+
+@router.post("/categories", response_model=AssetCategoryResponse, status_code=201)
+async def create_asset_category(
+    data: AssetCategoryCreate,
+    current_user=require_permission("assets", "write"),
+    db: AsyncSession = Depends(get_db),
+):
+    existing = await db.execute(select(AssetCategory).where(AssetCategory.name == data.name.strip()))
+    row = existing.scalar_one_or_none()
+    if row is not None:
+        return row
+    category = AssetCategory(name=data.name.strip(), description=data.description)
+    db.add(category)
+    await db.flush()
+    await db.refresh(category)
+    return category
 
 
 @router.get("/", response_model=list[AssetResponse])
