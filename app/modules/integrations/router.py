@@ -17,6 +17,79 @@ from app.modules.integrations.service import IntegrationService
 router = APIRouter(prefix="/webhooks", tags=["integrations"])
 
 
+async def _handle_mts_vats_webhook_internal(
+    request: Request,
+    db: AsyncSession,
+    token: str | None = None,
+    access_token: str | None = None,
+    key: str | None = None,
+    api_key: str | None = None,
+):
+    body = await request.body()
+    import json
+
+    payload: dict
+    if request.method.upper() == "GET":
+        payload = dict(request.query_params)
+    else:
+        payload = {}
+        if body:
+            try:
+                parsed = json.loads(body)
+                if isinstance(parsed, dict):
+                    payload = parsed
+            except Exception:
+                payload = {}
+        if not payload:
+            try:
+                form = await request.form()
+                payload = {k: v for k, v in form.items()}
+            except Exception:
+                payload = {}
+        if not payload:
+            payload = dict(request.query_params)
+
+    expected_token = (settings.MTS_VATS_WEBHOOK_TOKEN or "").strip()
+    auth_header = (request.headers.get("Authorization", "") or "").strip()
+    auth_token = ""
+    if auth_header:
+        low = auth_header.lower()
+        if low.startswith("bearer "):
+            auth_token = auth_header[7:].strip()
+        elif low.startswith("token "):
+            auth_token = auth_header[6:].strip()
+        else:
+            auth_token = auth_header
+    body_token = ""
+    if isinstance(payload, dict):
+        body_token = str(
+            payload.get("token")
+            or payload.get("access_token")
+            or payload.get("api_key")
+            or payload.get("key")
+            or ""
+        ).strip()
+    provided_token = (
+        token
+        or access_token
+        or key
+        or api_key
+        or request.headers.get("X-MTS-Token", "")
+        or request.headers.get("X-API-Key", "")
+        or request.headers.get("X-Auth-Token", "")
+        or auth_token
+        or body_token
+    ).strip()
+
+    if expected_token and provided_token != expected_token:
+        raise ForbiddenError("Invalid MTS webhook token")
+
+    ip = request.client.host if request.client else ""
+    async with db.begin():
+        service = IntegrationService(db)
+        return await service.handle_mts_vats_event(payload, ip_address=ip)
+
+
 @router.post("/site", include_in_schema=False)
 async def site_webhook(
     request: Request,
@@ -67,27 +140,43 @@ async def telephony_webhook(
 async def mts_vats_webhook(
     request: Request,
     token: str | None = Query(default=None),
+    access_token: str | None = Query(default=None),
+    key: str | None = Query(default=None),
+    api_key: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Webhook endpoint for MTS Virtual PBX.
     Supports token auth via query (`?token=...`) or header `X-MTS-Token`.
     """
-    expected_token = (settings.MTS_VATS_WEBHOOK_TOKEN or "").strip()
-    provided_token = (token or request.headers.get("X-MTS-Token", "")).strip()
+    return await _handle_mts_vats_webhook_internal(
+        request=request,
+        db=db,
+        token=token,
+        access_token=access_token,
+        key=key,
+        api_key=api_key,
+    )
 
-    if expected_token and provided_token != expected_token:
-        raise ForbiddenError("Invalid MTS webhook token")
 
-    body = await request.body()
-    import json
-
-    payload = json.loads(body)
-    ip = request.client.host if request.client else ""
-
-    async with db.begin():
-        service = IntegrationService(db)
-        return await service.handle_mts_vats_event(payload, ip_address=ip)
+@router.get("/mts-vats", include_in_schema=False)
+async def mts_vats_webhook_get(
+    request: Request,
+    token: str | None = Query(default=None),
+    access_token: str | None = Query(default=None),
+    key: str | None = Query(default=None),
+    api_key: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Некоторые инсталляции MTS присылают команды CRM через GET."""
+    return await _handle_mts_vats_webhook_internal(
+        request=request,
+        db=db,
+        token=token,
+        access_token=access_token,
+        key=key,
+        api_key=api_key,
+    )
 
 
 @router.get("/logs", response_model=list[WebhookLogResponse])

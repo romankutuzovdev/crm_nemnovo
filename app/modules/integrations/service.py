@@ -69,6 +69,7 @@ class IntegrationService:
     async def _process_telephony_payload(self, payload: dict, caller_phone: str) -> dict:
         # Telephony rule: each new call creates a separate client card.
         from app.modules.clients.repository import ClientRepository
+        from app.core.exceptions import ConflictError
         from app.shared.utils import normalize_phone
         from app.shared.enums import LeadSource, LeadStatus
 
@@ -103,13 +104,19 @@ class IntegrationService:
                 }
 
         client_repo = ClientRepository(self.session)
-        client = await client_repo.create(
-            first_name="Телефон",
-            last_name="Звонок",
-            phone=normalized_phone,
-            email=None,
-            source=LeadSource.TELEPHONY.value,
-        )
+        try:
+            client = await client_repo.create(
+                first_name="Телефон",
+                last_name="Звонок",
+                phone=normalized_phone,
+                email=None,
+                source=LeadSource.TELEPHONY.value,
+            )
+        except ConflictError:
+            # Backward compatibility: if DB still has unique phone, bind lead to existing client.
+            client = await client_repo.find_by_phone(normalized_phone)
+            if client is None:
+                raise
 
         lead = await lead_repo.create(
             client_id=client.id,
@@ -160,7 +167,8 @@ class IntegrationService:
         await self.session.flush()
 
         try:
-            event = self._pick(payload, "event", "type", "event_type", "call_event")
+            command = self._pick(payload, "command", "cmd", "method", "action")
+            event = self._pick(payload, "event", "type", "event_type", "call_event", "status")
             direction = self._pick(payload, "direction", "call_direction")
             if direction is None:
                 direction = self._nested_pick(payload, [("call", "direction"), ("data", "direction")])
@@ -189,6 +197,8 @@ class IntegrationService:
                 "ani",
                 "external_number",
                 "phone",
+                "client_phone",
+                "number",
             )
             if caller_phone is None:
                 caller_phone = self._nested_pick(
@@ -200,6 +210,62 @@ class IntegrationService:
                         ("data", "phone"),
                     ],
                 )
+
+            # history/events can be sent as command + list of entries
+            if not caller_phone and isinstance(payload.get("data"), list):
+                imported = 0
+                skipped = 0
+                for item in payload.get("data", []):
+                    if not isinstance(item, dict):
+                        skipped += 1
+                        continue
+                    phone = self._pick(
+                        item,
+                        "caller_id",
+                        "caller",
+                        "from",
+                        "from_number",
+                        "ani",
+                        "external_number",
+                        "phone",
+                        "client_phone",
+                        "number",
+                    )
+                    if not phone:
+                        skipped += 1
+                        continue
+                    row_call_id = self._pick(
+                        item,
+                        "call_id",
+                        "callId",
+                        "callid",
+                        "session_id",
+                        "sessionId",
+                        "uuid",
+                        "id",
+                    )
+                    row_direction = self._pick(item, "direction", "call_direction")
+                    if isinstance(row_direction, str) and row_direction.lower() not in {"in", "incoming", "inbound"}:
+                        skipped += 1
+                        continue
+                    row_payload = dict(item)
+                    row_payload["_integration"] = "mts_vats"
+                    row_payload["_command"] = command
+                    await self._process_telephony_payload(
+                        {
+                            "caller_id": str(phone),
+                            "call_id": str(row_call_id) if row_call_id is not None else None,
+                            "event": event or command,
+                            "direction": row_direction,
+                            "comment": self._pick(item, "status", "state", "event", "result"),
+                            "raw_payload": row_payload,
+                        },
+                        str(phone),
+                    )
+                    imported += 1
+                log.is_processed = True
+                await self.session.flush()
+                return {"status": "ok", "imported": imported, "skipped": skipped}
 
             if not caller_phone:
                 log.error = "No caller phone in MTS payload"
