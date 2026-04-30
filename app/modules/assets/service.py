@@ -296,36 +296,37 @@ class AssetService:
     ) -> StockMovement:
         if data.delta_qty == 0:
             raise ValidationError("Delta quantity must be non-zero")
+        reason = (data.reason or "").strip() or "Продажа"
 
-        async with self.session.begin():
-            product = await self.product_repo.get_or_raise(product_id)
+        product = await self.product_repo.get_or_raise(product_id)
 
-            new_qty = int(product.stock_quantity) + int(data.delta_qty)
-            if new_qty < 0:
-                raise ValidationError(
-                    f"Insufficient stock for product {product.sku}: current={product.stock_quantity}, delta={data.delta_qty}"
-                )
-
-            movement = StockMovement(
-                product_id=product_id,
-                delta_qty=data.delta_qty,
-                new_quantity=new_qty,
-                reason=data.reason,
-                created_by=updated_by,
+        new_qty = int(product.stock_quantity) + int(data.delta_qty)
+        if new_qty < 0:
+            raise ValidationError(
+                f"Insufficient stock for product {product.sku}: current={product.stock_quantity}, delta={data.delta_qty}"
             )
-            self.session.add(movement)
-            await self.session.flush()
 
-            product.stock_quantity = new_qty
+        movement = StockMovement(
+            product_id=product_id,
+            delta_qty=data.delta_qty,
+            new_quantity=new_qty,
+            reason=reason,
+            created_by=updated_by,
+        )
+        self.session.add(movement)
+        await self.session.flush()
 
-            await write_audit_log(
-                self.session,
-                updated_by,
-                AuditAction.UPDATE,
-                "products",
-                product_id,
-                after={"stock_quantity": new_qty, "delta_qty": data.delta_qty, "reason": data.reason},
-            )
+        product.stock_quantity = new_qty
+
+        await write_audit_log(
+            self.session,
+            updated_by,
+            AuditAction.UPDATE,
+            "products",
+            product_id,
+            after={"stock_quantity": new_qty, "delta_qty": data.delta_qty, "reason": reason},
+        )
+        await self.session.flush()
 
         return movement
 

@@ -26,6 +26,17 @@ interface StockMovement {
   created_at: string;
 }
 
+interface ProductDailySalesRow {
+  product_id: string;
+  name: string;
+  sku: string;
+  unit: string;
+  sold_qty: number;
+  movements_count: number;
+  estimated_amount: number;
+  reason: string;
+}
+
 const UNIT_LABELS: Record<string, string> = {
   pcs: "шт.",
   kg: "кг",
@@ -44,7 +55,9 @@ export default function StockPage() {
   const [showAdjust, setShowAdjust] = useState(false);
   const [adjustProductId, setAdjustProductId] = useState<string | null>(null);
   const [adjustDelta, setAdjustDelta] = useState("0");
-  const [adjustReason, setAdjustReason] = useState("");
+  const [adjustReason, setAdjustReason] = useState("Продажа");
+  const [salesDay, setSalesDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const [salesSearch, setSalesSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
     sku: "",
@@ -61,6 +74,16 @@ export default function StockPage() {
       apiFetch<Product[]>("/assets/products", {
         token,
       }),
+    enabled: !!token,
+  });
+
+  const { data: dailySales = [], isFetching: salesLoading } = useQuery({
+    queryKey: ["stock", "daily-sales", salesDay, salesSearch],
+    queryFn: () =>
+      apiFetch<ProductDailySalesRow[]>(
+        `/assets/products/sales-daily?day=${encodeURIComponent(salesDay)}&search=${encodeURIComponent(salesSearch)}`,
+        { token },
+      ),
     enabled: !!token,
   });
 
@@ -115,7 +138,7 @@ export default function StockPage() {
           token,
           body: JSON.stringify({
             delta_qty: Number(adjustDelta),
-            reason: adjustReason.trim() ? adjustReason.trim() : null,
+            reason: adjustReason.trim() ? adjustReason.trim() : "Продажа",
           }),
         }
       ),
@@ -124,7 +147,7 @@ export default function StockPage() {
       setShowAdjust(false);
       setAdjustProductId(null);
       setAdjustDelta("0");
-      setAdjustReason("");
+      setAdjustReason("Продажа");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["products"] }),
         queryClient.invalidateQueries({
@@ -163,6 +186,65 @@ export default function StockPage() {
         )}
       </div>
 
+      <div className="rounded-xl border border-slate-700 overflow-hidden mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-slate-800/40">
+          <div>
+            <h2 className="text-base font-semibold">Дневной отчет продаж (минус по учету)</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Показывает списания товара за выбранный день (движения с отрицательным количеством).
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={salesSearch}
+              onChange={(e) => setSalesSearch(e.target.value)}
+              placeholder="Поиск по товару или SKU"
+              className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-sm min-w-[220px]"
+            />
+            <label className="text-sm text-slate-400">Дата:</label>
+            <input
+              type="date"
+              value={salesDay}
+              onChange={(e) => setSalesDay(e.target.value)}
+              className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-sm"
+            />
+          </div>
+        </div>
+        <table className="w-full">
+          <thead className="bg-slate-800/50">
+            <tr>
+              <th className="text-left p-3">Товар</th>
+              <th className="text-left p-3">SKU</th>
+              <th className="text-left p-3">Причина</th>
+              <th className="text-right p-3">Продано</th>
+              <th className="text-right p-3">Списаний</th>
+              <th className="text-right p-3">Сумма (оценка)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dailySales.map((row) => (
+              <tr key={row.product_id} className="border-t border-slate-700">
+                <td className="p-3">{row.name}</td>
+                <td className="p-3 font-mono text-sm">{row.sku}</td>
+                <td className="p-3">{row.reason}</td>
+                <td className="p-3 text-right">
+                  {row.sold_qty} {UNIT_LABELS[row.unit] ?? row.unit}
+                </td>
+                <td className="p-3 text-right">{row.movements_count}</td>
+                <td className="p-3 text-right">{Number(row.estimated_amount).toLocaleString("ru")} BYN</td>
+              </tr>
+            ))}
+            {dailySales.length === 0 && (
+              <tr className="border-t border-slate-700">
+                <td className="p-3 text-slate-500" colSpan={6}>
+                  {salesLoading ? "Загрузка…" : "За выбранный день продаж (списаний) нет."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       {products.length > 0 ? (
         <div className="rounded-xl border border-slate-700 overflow-hidden">
           <table className="w-full">
@@ -194,7 +276,7 @@ export default function StockPage() {
                         onClick={() => {
                           setAdjustProductId(p.id);
                           setAdjustDelta("0");
-                          setAdjustReason("");
+                          setAdjustReason("Продажа");
                           setShowAdjust(true);
                         }}
                         className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm"
@@ -347,7 +429,7 @@ export default function StockPage() {
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="например инвентаризация"
+                  placeholder='по умолчанию "Продажа"'
                 />
               </div>
             </div>

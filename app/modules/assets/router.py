@@ -19,6 +19,7 @@ from app.modules.assets.schemas import (
     AssetStatusPatch,
     AssetUpdate,
     ProductCreate,
+    ProductDailySalesRow,
     ProductResponse,
     StockAdjustRequest,
     StockMovementResponse,
@@ -26,6 +27,7 @@ from app.modules.assets.schemas import (
 from app.modules.assets.service import AssetService
 from app.modules.assets.repository import ProductRepository
 from app.modules.assets.models import AssetCategory
+from app.modules.assets.models import Product, StockMovement
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -139,6 +141,68 @@ async def adjust_product_stock(
 ):
     service = AssetService(db)
     return await service.adjust_product_stock(product_id, data=data, updated_by=current_user.id)
+
+
+@router.get("/products/sales-daily", response_model=list[ProductDailySalesRow], tags=["products"])
+async def get_daily_product_sales(
+    day: str | None = Query(None, description="Дата отчета в формате YYYY-MM-DD"),
+    search: str | None = Query(None, description="Поиск по названию товара или SKU"),
+    current_user=require_permission("assets", "read"),
+    db: AsyncSession = Depends(get_db),
+):
+    from datetime import date
+
+    from sqlalchemy import case, func
+
+    report_day = date.fromisoformat(day) if day else date.today()
+    day_expr = func.date(StockMovement.created_at)
+    sold_qty_expr = func.sum(case((StockMovement.delta_qty < 0, -StockMovement.delta_qty), else_=0))
+    movement_count_expr = func.count(StockMovement.id)
+    estimated_amount_expr = func.sum(
+        case((StockMovement.delta_qty < 0, (-StockMovement.delta_qty) * Product.price), else_=0.0)
+    )
+
+    stmt = (
+        select(
+            Product.id.label("product_id"),
+            Product.name.label("name"),
+            Product.sku.label("sku"),
+            Product.unit.label("unit"),
+            func.coalesce(StockMovement.reason, "Продажа").label("reason"),
+            sold_qty_expr.label("sold_qty"),
+            movement_count_expr.label("movements_count"),
+            estimated_amount_expr.label("estimated_amount"),
+        )
+        .join(StockMovement, StockMovement.product_id == Product.id)
+        .where(day_expr == report_day.isoformat())
+        .where(StockMovement.delta_qty < 0)
+        .group_by(
+            Product.id,
+            Product.name,
+            Product.sku,
+            Product.unit,
+            func.coalesce(StockMovement.reason, "Продажа"),
+        )
+        .order_by(sold_qty_expr.desc(), Product.name.asc(), Product.sku.asc())
+    )
+    if search and search.strip():
+        needle = f"%{search.strip()}%"
+        stmt = stmt.where((Product.name.ilike(needle)) | (Product.sku.ilike(needle)))
+
+    rows = (await db.execute(stmt)).all()
+    return [
+        ProductDailySalesRow(
+            product_id=row.product_id,
+            name=row.name,
+            sku=row.sku,
+            unit=row.unit,
+            sold_qty=int(row.sold_qty or 0),
+            movements_count=int(row.movements_count or 0),
+            estimated_amount=float(row.estimated_amount or 0),
+            reason=str(row.reason or "Продажа"),
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)

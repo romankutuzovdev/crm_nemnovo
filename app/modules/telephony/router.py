@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -13,6 +14,7 @@ from app.modules.telephony.schemas import (
 )
 
 router = APIRouter(prefix="/telephony", tags=["telephony"])
+logger = logging.getLogger(__name__)
 
 
 def _pick_payload_value(payload: dict, *keys: str):
@@ -40,7 +42,16 @@ async def _fetch_mts_history_sample(
     df = date_from or (date.today() - timedelta(days=7))
     dt = date_to or date.today()
 
-    paths = ["/calls", "/history", "/cdr", "/calls/list", "/call/list", "/cdr/list", "/events"]
+    paths = [
+        "/calls",
+        "/history",
+        "/cdr",
+        "/calls/list",
+        "/call/list",
+        "/cdr/list",
+        "/events",
+        "/history/list",
+    ]
     header_variants = [
         {"Authorization": key},
         {"Authorization": f"Bearer {key}"},
@@ -59,6 +70,8 @@ async def _fetch_mts_history_sample(
         {"start": df.isoformat(), "end": dt.isoformat()},
         {"start_date": df.isoformat(), "end_date": dt.isoformat()},
         {"period_from": df.isoformat(), "period_to": dt.isoformat()},
+        {"cmd": "history", "date_from": df.isoformat(), "date_to": dt.isoformat()},
+        {"cmd": "history", "from": df.isoformat(), "to": dt.isoformat()},
     ]
     tried: list[str] = []
     deadline_ts = pytime.monotonic() + 24.0  # frontend timeout is 30s
@@ -84,6 +97,16 @@ async def _fetch_mts_history_sample(
                         except Exception:
                             continue
                         text = (r.text or "").strip()
+                        # Debug log for understanding MTS payload format and parser tuning.
+                        logger.info(
+                            "mts.history.probe_response status=%s path=%s request_headers=%s request_query=%s response_ct=%s body_preview=%s",
+                            r.status_code,
+                            p,
+                            ",".join(h.keys()),
+                            ",".join(params.keys()),
+                            r.headers.get("content-type"),
+                            text[:1500],
+                        )
                         if r.status_code in (400, 401) and ("Empty token" in text or "Invalid token" in text):
                             continue
                         if r.status_code >= 400:
@@ -101,6 +124,8 @@ def _extract_history_rows(sample: dict | list | str | None) -> list[dict]:
         return [x for x in sample if isinstance(x, dict)]
     if not isinstance(sample, dict):
         return []
+    if sample.get("cmd") == "history" and isinstance(sample.get("data"), list):
+        return [x for x in sample.get("data", []) if isinstance(x, dict)]
     candidates = [
         sample.get("items"),
         sample.get("calls"),
@@ -113,6 +138,56 @@ def _extract_history_rows(sample: dict | list | str | None) -> list[dict]:
         if isinstance(c, list):
             return [x for x in c if isinstance(x, dict)]
     return []
+
+
+def _normalize_mts_history_row(row: dict) -> dict:
+    row_type = str(_pick_payload_value(row, "type", "event", "call_event") or "").strip().lower()
+    row_direction = str(_pick_payload_value(row, "direction", "call_direction") or "").strip().lower()
+    if not row_direction:
+        if row_type in {"in", "incoming", "accepted", "completed", "cancelled"}:
+            row_direction = "in"
+        elif row_type in {"out", "outgoing"}:
+            row_direction = "out"
+
+    caller_phone = _pick_payload_value(
+        row,
+        "phone",
+        "caller_id",
+        "caller",
+        "from",
+        "from_number",
+        "ani",
+        "external_number",
+    )
+    to_number = _pick_payload_value(
+        row,
+        "telnum",
+        "diversion",
+        "ext",
+        "to",
+        "to_number",
+        "line",
+        "virtual_number",
+    )
+    call_id = _pick_payload_value(row, "callid", "call_id", "callId", "session_id", "sessionId", "uuid", "id")
+    recording = _pick_payload_value(row, "link", "recording_url", "recordingUrl", "record_url", "recording")
+    call_status = _pick_payload_value(row, "status", "state", "result")
+    started_at = _pick_payload_value(row, "start", "started_at", "created_at", "time")
+    duration = _pick_payload_value(row, "duration", "billsec")
+
+    normalized = dict(row)
+    normalized["_normalized"] = {
+        "event": row_type or None,
+        "direction": row_direction or None,
+        "caller_phone": str(caller_phone) if caller_phone is not None else None,
+        "to_number": str(to_number) if to_number is not None else None,
+        "call_id": str(call_id) if call_id is not None else None,
+        "recording_url": str(recording) if recording is not None else None,
+        "status": str(call_status) if call_status is not None else None,
+        "started_at": str(started_at) if started_at is not None else None,
+        "duration": str(duration) if duration is not None else None,
+    }
+    return normalized
 
 
 @router.get("/calls", response_model=list[TelephonyCallRow])
@@ -179,13 +254,30 @@ async def list_calls(
                 "did",
                 "line",
                 "virtual_number",
+                "telnum",
+                "diversion",
+                "ext",
             )
             if isinstance(rp.get("call"), dict):
                 call = rp.get("call") or {}
                 from_number = from_number or pick(call, "from", "from_number", "caller", "phone")
-                to_number = to_number or pick(call, "to", "to_number", "called", "line", "virtual_number")
+                to_number = to_number or pick(
+                    call,
+                    "to",
+                    "to_number",
+                    "called",
+                    "line",
+                    "virtual_number",
+                    "telnum",
+                    "diversion",
+                    "ext",
+                )
                 direction = direction or pick(call, "direction", "call_direction")
                 call_status = call_status or pick(call, "status", "state", "result", "event", "call_event")
+            if isinstance(rp.get("_normalized"), dict):
+                normalized = rp.get("_normalized") or {}
+                from_number = from_number or pick(normalized, "caller_phone", "from_number")
+                to_number = to_number or pick(normalized, "to_number", "line", "virtual_number", "telnum")
         client_name = None
         client_phone = None
         if client is not None:
@@ -321,7 +413,7 @@ async def import_mts_vats_history(
     """
     Импортировать историю звонков из MTS VATS API в CRM (лиды + клиенты телефонии).
     """
-    from app.modules.integrations.service import IntegrationService
+    from app.modules.integrations.models import WebhookLog
 
     sample, path, _status_code, _tried = await _fetch_mts_history_sample(date_from=date_from, date_to=date_to)
     rows = _extract_history_rows(sample)
@@ -332,33 +424,50 @@ async def import_mts_vats_history(
             source_path=path,
         )
 
-    service = IntegrationService(db)
     imported = 0
     skipped = 0
+    seen_call_ids: set[str] = set()
     for row in rows:
-        direction = _pick_payload_value(row, "direction", "call_direction")
-        if isinstance(direction, str) and direction.lower() not in {"in", "incoming", "inbound"}:
-            skipped += 1
-            continue
-
+        normalized_row = _normalize_mts_history_row(row)
+        call_id = _pick_payload_value(
+            normalized_row,
+            "callid",
+            "call_id",
+            "callId",
+            "session_id",
+            "sessionId",
+            "uuid",
+            "id",
+        ) or _pick_payload_value((normalized_row.get("_normalized") or {}), "call_id")
         caller_phone = _pick_payload_value(
-            row, "caller_id", "caller", "from", "from_number", "ani", "external_number", "phone"
-        )
-        if not caller_phone and isinstance(row.get("call"), dict):
-            caller_phone = _pick_payload_value(row.get("call", {}), "from", "caller", "phone")
-        if not caller_phone:
+            normalized_row,
+            "phone",
+            "caller_id",
+            "caller",
+            "from",
+            "from_number",
+            "ani",
+            "external_number",
+        ) or _pick_payload_value((normalized_row.get("_normalized") or {}), "caller_phone")
+
+        # For history import we keep only rows that can be identified.
+        if not call_id or not caller_phone:
             skipped += 1
             continue
+        call_id_str = str(call_id)
+        if call_id_str in seen_call_ids:
+            skipped += 1
+            continue
+        seen_call_ids.add(call_id_str)
 
-        mapped = {
-            "caller_id": str(caller_phone),
-            "call_id": _pick_payload_value(row, "call_id", "callId", "callid", "session_id", "sessionId", "uuid", "id"),
-            "event": _pick_payload_value(row, "event", "type", "event_type", "call_event"),
-            "direction": direction,
-            "comment": _pick_payload_value(row, "status", "state", "event"),
-            "raw_payload": dict(row),
-        }
-        await service._process_telephony_payload(mapped, str(caller_phone))
+        db.add(
+            WebhookLog(
+                source="mts_vats",
+                raw_payload=normalized_row,
+                is_processed=True,
+                ip_address="mts_import_history",
+            )
+        )
         imported += 1
 
     return MtsVatsImportResponse(

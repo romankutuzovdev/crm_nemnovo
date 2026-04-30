@@ -77,6 +77,13 @@ const CALL_STATUS_META: Record<string, { label: string; className: string }> = {
   },
 };
 
+const COMMENT_LABELS: Record<string, string> = {
+  ACCEPTED: "Принят",
+  SUCCESS: "Успешный",
+  MISSED: "Пропущен",
+  NOTAVAILABLE: "Недоступен",
+};
+
 function getCallStatusBadge(status: string | null | undefined) {
   const raw = String(status ?? "").trim();
   if (!raw) return null;
@@ -88,6 +95,33 @@ function getCallStatusBadge(status: string | null | undefined) {
       {meta.label}
     </span>
   );
+}
+
+function getDirectionBadge(direction: string | null | undefined) {
+  const raw = String(direction ?? "").trim().toLowerCase();
+  if (!raw) return <span className="text-text-secondary">—</span>;
+  if (raw === "in" || raw === "incoming") {
+    return (
+      <span className="inline-flex items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+        Входящий
+      </span>
+    );
+  }
+  if (raw === "out" || raw === "outgoing") {
+    return (
+      <span className="inline-flex items-center rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-0.5 text-xs font-medium text-fuchsia-700 dark:text-fuchsia-300">
+        Исходящий
+      </span>
+    );
+  }
+  return <span className="text-text-secondary">{direction}</span>;
+}
+
+function getCommentLabel(comment: string | null | undefined) {
+  const raw = String(comment ?? "").trim();
+  if (!raw) return "—";
+  const translated = COMMENT_LABELS[raw.toUpperCase()];
+  return translated ?? raw;
 }
 
 export default function CallsPage() {
@@ -171,6 +205,7 @@ export default function CallsPage() {
               <th className="text-left p-4">С какого</th>
               <th className="text-left p-4">На какой</th>
               <th className="text-left p-4">Телефон клиента</th>
+              <th className="text-left p-4">Направление</th>
               <th className="text-left p-4">Статус</th>
               <th className="text-left p-4">ID звонка</th>
               <th className="text-left p-4">Комментарий</th>
@@ -195,13 +230,14 @@ export default function CallsPage() {
                 <td className="p-4 font-mono text-xs text-text-secondary">{c.from_number ?? "—"}</td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{c.to_number ?? "—"}</td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{c.client_phone ?? "—"}</td>
+                <td className="p-4">{getDirectionBadge(c.direction)}</td>
                 <td className="p-4">
                   {getCallStatusBadge(c.call_status) ?? (
                     <span>{LEAD_STATUS_LABELS[c.status] ?? c.status}</span>
                   )}
                 </td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{c.call_id ?? "—"}</td>
-                <td className="p-4 text-text-secondary max-w-[26rem] break-words">{c.comment ?? "—"}</td>
+                <td className="p-4 text-text-secondary max-w-[26rem] break-words">{getCommentLabel(c.comment)}</td>
                 <td className="p-4">
                   {c.recording_url ? (
                     <a className="text-primary hover:underline" href={c.recording_url} target="_blank" rel="noreferrer">
@@ -215,7 +251,7 @@ export default function CallsPage() {
             ))}
             {calls.length === 0 ? (
               <tr className="border-t border-border">
-                <td className="p-4 text-text-secondary" colSpan={9}>
+                <td className="p-4 text-text-secondary" colSpan={10}>
                   Пока нет звонков (заявок с источником «телефония»). Ниже — сырые события webhook (если они приходили).
                 </td>
               </tr>

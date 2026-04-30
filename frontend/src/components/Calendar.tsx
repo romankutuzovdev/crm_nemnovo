@@ -1743,8 +1743,14 @@ export default function Calendar() {
       </div>
 
       {showAddModal && addDate && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-black text-slate-900 dark:text-slate-100 rounded-xl p-6 w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-xl max-h-[90vh] overflow-auto">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-black text-slate-900 dark:text-slate-100 rounded-xl p-6 w-full max-w-3xl border border-slate-200 dark:border-slate-800 shadow-xl max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold mb-4">
               {editingCalendarLeadId ? "Редактирование заявки (мероприятие)" : "Новая заявка (мероприятие)"}
             </h2>
@@ -2360,8 +2366,14 @@ export default function Calendar() {
       )}
 
       {selectedEvent && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-700 shadow-xl max-h-[90vh] overflow-y-auto text-slate-900 dark:text-slate-100">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedEvent(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-lg border border-slate-200 dark:border-slate-700 shadow-xl max-h-[90vh] overflow-y-auto text-slate-900 dark:text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold mb-1">{selectedEvent.title}</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
               Редактирование мероприятия: даты, гости, статус заказа, комментарий. Оплата — блок ниже (или в карточке
@@ -3169,8 +3181,14 @@ export default function Calendar() {
       )}
 
       {showArchiveModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-4xl border border-slate-200 dark:border-slate-700 shadow-xl max-h-[90vh] overflow-y-auto text-slate-900 dark:text-slate-100">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowArchiveModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-xl p-6 w-full max-w-4xl border border-slate-200 dark:border-slate-700 shadow-xl max-h-[90vh] overflow-y-auto text-slate-900 dark:text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Архив календаря</h2>
               <button

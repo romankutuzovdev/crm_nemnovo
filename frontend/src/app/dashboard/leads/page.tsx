@@ -40,6 +40,19 @@ const LEAD_SOURCE_LABELS: Record<string, string> = {
   calendar: "Календарь",
 };
 
+const COMMENT_LABELS: Record<string, string> = {
+  ACCEPTED: "Принят",
+  SUCCESS: "Успешный",
+  MISSED: "Пропущен",
+  NOTAVAILABLE: "Недоступен",
+};
+
+function translateComment(comment: string | null | undefined) {
+  const raw = String(comment ?? "").trim();
+  if (!raw) return "—";
+  return COMMENT_LABELS[raw.toUpperCase()] ?? raw;
+}
+
 interface AssignableUser {
   id: string;
   full_name: string;
@@ -313,8 +326,11 @@ export default function LeadsPage() {
                       )}
                     </td>
                     <td className="p-3 text-sm max-w-[200px]">
-                      <div className="truncate" title={l.comment ?? undefined}>
-                        {l.comment ? `${l.comment.slice(0, 80)}${l.comment.length > 80 ? "…" : ""}` : "—"}
+                      <div className="truncate" title={translateComment(l.comment)}>
+                        {(() => {
+                          const translated = translateComment(l.comment);
+                          return `${translated.slice(0, 80)}${translated.length > 80 ? "…" : ""}`;
+                        })()}
                       </div>
                       {!isConverted && (
                         <button

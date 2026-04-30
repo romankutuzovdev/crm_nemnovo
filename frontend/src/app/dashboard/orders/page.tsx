@@ -289,8 +289,14 @@ export default function OrdersPage() {
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-brandBlue-950/35 rounded-xl p-6 w-full max-w-xl border border-brandBlue-700/50 max-h-[90vh] overflow-y-auto shadow-[0_0_0_1px_rgba(37,99,235,0.15)]">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowCreate(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl p-6 w-full max-w-xl border border-slate-200 dark:border-slate-700 max-h-[90vh] overflow-y-auto shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Новый заказ</h2>
               <button
@@ -305,8 +311,8 @@ export default function OrdersPage() {
               <div className="md:col-span-2">
                 <label className="block text-sm text-slate-400 mb-1">Клиент</label>
                 {selectedClient ? (
-                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/80 border border-brandBlue-400/40">
-                    <span className="text-slate-200">
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600">
+                    <span className="text-slate-900 dark:text-slate-200">
                       {selectedClient.first_name} {selectedClient.last_name} · {selectedClient.phone}
                     </span>
                     <button
@@ -322,7 +328,7 @@ export default function OrdersPage() {
                     <input
                       value={clientSearch}
                       onChange={(e) => setClientSearch(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700"
                       placeholder="Имя, телефон, email…"
                       autoComplete="off"
                     />
@@ -340,7 +346,7 @@ export default function OrdersPage() {
                                   setSelectedClient(c);
                                   setClientSearch("");
                                 }}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-700/50 text-slate-200"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700/50 text-slate-900 dark:text-slate-200"
                               >
                                 <span className="font-medium">
                                   {c.first_name} {c.last_name}
@@ -372,7 +378,7 @@ export default function OrdersPage() {
                 <select
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700"
                 >
                   <option value="rafting">Сплав</option>
                   <option value="hostel">Хостел</option>
@@ -385,7 +391,7 @@ export default function OrdersPage() {
                 <input
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700"
                   inputMode="decimal"
                 />
               </div>
@@ -395,7 +401,7 @@ export default function OrdersPage() {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700"
                 />
               </div>
               <div>
@@ -404,7 +410,7 @@ export default function OrdersPage() {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700"
                 />
               </div>
               <div className="md:col-span-2">
@@ -412,7 +418,7 @@ export default function OrdersPage() {
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/90 border border-brandBlue-800/60"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700"
                   rows={3}
                 />
               </div>

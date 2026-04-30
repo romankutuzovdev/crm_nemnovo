@@ -123,3 +123,14 @@ class StockMovementResponse(UUIDSchema):
     reason: str | None
     created_by: UUID
     created_at: datetime
+
+
+class ProductDailySalesRow(BaseSchema):
+    product_id: UUID
+    name: str
+    sku: str
+    unit: str
+    sold_qty: int
+    movements_count: int
+    estimated_amount: float
+    reason: str

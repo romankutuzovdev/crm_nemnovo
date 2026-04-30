@@ -1,12 +1,31 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth";
 import { apiFetch } from "@/lib/api";
 import { PageTransition } from "@/components/motion";
 import { ThemeToggle } from "@/components/ThemeToggle";
+
+interface TelephonyEventToastRow {
+  webhook_id: string;
+  created_at: string;
+  call_id: string | null;
+  raw_payload: Record<string, unknown> | null;
+}
+
+function pickValue(obj: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  if (!obj) return null;
+  for (const key of keys) {
+    const value = obj[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return String(value);
+    }
+  }
+  return null;
+}
 
 export default function DashboardLayout({
   children,
@@ -16,6 +35,18 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { user, getToken, logout, _hasHydrated } = useAuthStore();
+  const token = getToken() ?? undefined;
+  const seenCallIdsRef = useRef<Set<string>>(new Set());
+  const incomingSoundInitializedRef = useRef(false);
+
+  const { data: telephonyEvents = [] } = useQuery({
+    queryKey: ["dashboard", "incoming-call-toast"],
+    queryFn: () => apiFetch<TelephonyEventToastRow[]>("/telephony/events?limit=20", { token }),
+    enabled: !!token,
+    refetchInterval: 2000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+  });
 
   useEffect(() => {
     if (!_hasHydrated) return; // ждём загрузку из localStorage
@@ -55,6 +86,70 @@ export default function DashboardLayout({
       ? pathname === "/dashboard"
       : pathname === href || pathname.startsWith(`${href}/`);
   const isCalendarRoute = pathname === "/dashboard/calendar";
+  const latestIncomingEvent = useMemo(
+    () =>
+      telephonyEvents.find((event) => {
+        const payload = event.raw_payload;
+        const direction = pickValue(payload, "direction", "call_direction")?.toLowerCase();
+        const type = pickValue(payload, "type", "event", "status")?.toLowerCase();
+        if (direction && ["in", "incoming", "inbound"].includes(direction)) return true;
+        if (type && ["incoming", "accepted", "completed", "missed", "success", "notavailable"].includes(type)) {
+          return true;
+        }
+        return false;
+      }),
+    [telephonyEvents],
+  );
+  const incomingFrom = pickValue(
+    latestIncomingEvent?.raw_payload,
+    "phone",
+    "caller_id",
+    "caller",
+    "from",
+    "from_number",
+  );
+  const incomingTo = pickValue(
+    latestIncomingEvent?.raw_payload,
+    "telnum",
+    "diversion",
+    "ext",
+    "to",
+    "to_number",
+  );
+
+  const playIncomingSound = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  }, []);
+
+  useEffect(() => {
+    const currentCallId = latestIncomingEvent?.call_id?.trim();
+    if (!currentCallId) return;
+
+    if (!incomingSoundInitializedRef.current) {
+      // First fetch should not beep for old calls already in history.
+      seenCallIdsRef.current.add(currentCallId);
+      incomingSoundInitializedRef.current = true;
+      return;
+    }
+
+    if (seenCallIdsRef.current.has(currentCallId)) return;
+    seenCallIdsRef.current.add(currentCallId);
+    playIncomingSound();
+  }, [latestIncomingEvent?.call_id, playIncomingSound]);
 
   const nav = [
     { href: "/dashboard", label: "Главная" },
@@ -124,6 +219,22 @@ export default function DashboardLayout({
           {children}
         </PageTransition>
       </main>
+      {latestIncomingEvent ? (
+        <Link
+          href="/dashboard/calls"
+          className="fixed right-4 bottom-4 z-50 max-w-sm rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 shadow-lg backdrop-blur"
+        >
+          <p className="text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+            Сейчас входящий звонок
+          </p>
+          <p className="mt-1 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+            {incomingFrom ?? "Номер не определен"} {incomingTo ? `→ ${incomingTo}` : ""}
+          </p>
+          <p className="mt-1 text-xs text-emerald-700/90 dark:text-emerald-300/90">
+            Открыть раздел звонков
+          </p>
+        </Link>
+      ) : null}
     </div>
   );
 }

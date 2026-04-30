@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-change-in-production"
     ALLOWED_HOSTS: list[str] = ["*"]
     API_V1_PREFIX: str = "/api/v1"
+    TZ: str = "Europe/Minsk"
 
     # Database (SQLite по умолчанию для разработки)
     DATABASE_URL: str = "sqlite+aiosqlite:///./crm.db"

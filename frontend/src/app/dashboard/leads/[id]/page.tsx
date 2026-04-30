@@ -81,6 +81,19 @@ const LEAD_SOURCE_LABELS: Record<string, string> = {
   calendar: "Календарь",
 };
 
+const COMMENT_LABELS: Record<string, string> = {
+  ACCEPTED: "Принят",
+  SUCCESS: "Успешный",
+  MISSED: "Пропущен",
+  NOTAVAILABLE: "Недоступен",
+};
+
+function translateComment(comment: string | null | undefined) {
+  const raw = String(comment ?? "").trim();
+  if (!raw) return "";
+  return COMMENT_LABELS[raw.toUpperCase()] ?? raw;
+}
+
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "new", label: "Новая" },
   { value: "in_progress", label: "В работе" },
@@ -496,7 +509,7 @@ export default function LeadDetailPage() {
             <label className="block text-xs text-text-secondary mb-1">Комментарий</label>
             <textarea
               rows={4}
-              value={lead.comment ?? ""}
+              value={translateComment(lead.comment)}
               onChange={(e) => patchLead.mutate({ comment: e.target.value || null })}
               disabled={patchLead.isPending}
               className="w-full px-3 py-2 rounded-lg bg-surface border border-border text-sm"
