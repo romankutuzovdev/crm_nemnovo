@@ -28,6 +28,7 @@ async def _fetch_mts_history_sample(
     date_to: date | None = None,
 ) -> tuple[dict | list | str | None, str | None, int | None, list[str]]:
     import httpx
+    import time as pytime
 
     from app.core.config import settings
 
@@ -39,15 +40,7 @@ async def _fetch_mts_history_sample(
     df = date_from or (date.today() - timedelta(days=7))
     dt = date_to or date.today()
 
-    paths = [
-        "/calls",
-        "/calls/list",
-        "/call/list",
-        "/cdr",
-        "/cdr/list",
-        "/history",
-        "/events",
-    ]
+    paths = ["/calls", "/history", "/cdr", "/calls/list", "/call/list", "/cdr/list", "/events"]
     header_variants = [
         {"Authorization": key},
         {"Authorization": f"Bearer {key}"},
@@ -59,13 +52,7 @@ async def _fetch_mts_history_sample(
         {"X-MTS-Auth": key},
         {"X-Access-Token": key},
     ]
-    query_variants = [
-        {},
-        {"token": key},
-        {"access_token": key},
-        {"key": key},
-        {"api_key": key},
-    ]
+    query_variants = [{}, {"token": key}, {"access_token": key}, {"api_key": key}, {"key": key}]
     date_range_variants = [
         {"date_from": df.isoformat(), "date_to": dt.isoformat()},
         {"from": df.isoformat(), "to": dt.isoformat()},
@@ -74,8 +61,10 @@ async def _fetch_mts_history_sample(
         {"period_from": df.isoformat(), "period_to": dt.isoformat()},
     ]
     tried: list[str] = []
+    deadline_ts = pytime.monotonic() + 24.0  # frontend timeout is 30s
+    max_attempts = 40
 
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=3.5, follow_redirects=True) as client:
         for p in paths:
             url = f"{base}{p}"
             for dr in date_range_variants:
@@ -83,12 +72,17 @@ async def _fetch_mts_history_sample(
                     params = dict(dr)
                     params.update(q or {})
                     for h in header_variants:
+                        if len(tried) >= max_attempts or pytime.monotonic() >= deadline_ts:
+                            return None, p, None, tried
                         label = (
                             f"GET {p} headers={','.join(h.keys())}"
                             + (f" query={','.join(params.keys())}" if params else "")
                         )
                         tried.append(label)
-                        r = await client.get(url, headers=h, params=params or None)
+                        try:
+                            r = await client.get(url, headers=h, params=params or None)
+                        except Exception:
+                            continue
                         text = (r.text or "").strip()
                         if r.status_code in (400, 401) and ("Empty token" in text or "Invalid token" in text):
                             continue
