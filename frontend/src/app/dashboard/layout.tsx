@@ -120,6 +120,7 @@ export default function DashboardLayout({
       ? pathname === "/dashboard"
       : pathname === href || pathname.startsWith(`${href}/`);
   const isCalendarRoute = pathname === "/dashboard/calendar";
+  const roleName = user?.role?.name;
   const latestIncomingEvent = useMemo(
     () =>
       telephonyEvents.find((event) => {
@@ -205,7 +206,7 @@ export default function DashboardLayout({
     { href: "/dashboard/directories", label: "Справочники" },
     { href: "/dashboard/stock", label: "Склад" },
     { href: "/dashboard/reports", label: "Отчёты" },
-    ...(user.role?.name === "director" || user.role?.name === "admin"
+    ...(roleName === "director" || roleName === "admin"
       ? [{ href: "/dashboard/reports/analytics", label: "Аналитика (директор)" }]
       : []),
     { href: "/dashboard/settings", label: "Настройки" },
