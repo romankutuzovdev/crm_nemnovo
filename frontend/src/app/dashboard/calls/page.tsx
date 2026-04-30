@@ -13,6 +13,10 @@ interface CallRow {
   client_id: string | null;
   client_name: string | null;
   client_phone: string | null;
+  from_number: string | null;
+  to_number: string | null;
+  direction: string | null;
+  call_status: string | null;
   comment: string | null;
   recording_url: string | null;
   converted_deal_id: string | null;
@@ -26,6 +30,7 @@ interface WebhookEventRow {
   error: string | null;
   caller_phone: string | null;
   call_id: string | null;
+  event_status: string | null;
   recording_url: string | null;
 }
 
@@ -52,6 +57,38 @@ const LEAD_STATUS_LABELS: Record<string, string> = {
   converted: "Конвертирована",
   rejected: "Отказ",
 };
+
+const CALL_STATUS_META: Record<string, { label: string; className: string }> = {
+  ACCEPTED: {
+    label: "Принят",
+    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  SUCCESS: {
+    label: "Успешный",
+    className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  },
+  MISSED: {
+    label: "Пропущен",
+    className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  NOTAVAILABLE: {
+    label: "Недоступен",
+    className: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  },
+};
+
+function getCallStatusBadge(status: string | null | undefined) {
+  const raw = String(status ?? "").trim();
+  if (!raw) return null;
+  const normalized = raw.toUpperCase();
+  const meta = CALL_STATUS_META[normalized];
+  if (!meta) return null;
+  return (
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${meta.className}`}>
+      {meta.label}
+    </span>
+  );
+}
 
 export default function CallsPage() {
   const getToken = useAuthStore((s) => s.getToken);
@@ -131,7 +168,9 @@ export default function CallsPage() {
             <tr>
               <th className="text-left p-4">Дата</th>
               <th className="text-left p-4">Клиент</th>
-              <th className="text-left p-4">Телефон</th>
+              <th className="text-left p-4">С какого</th>
+              <th className="text-left p-4">На какой</th>
+              <th className="text-left p-4">Телефон клиента</th>
               <th className="text-left p-4">Статус</th>
               <th className="text-left p-4">ID звонка</th>
               <th className="text-left p-4">Комментарий</th>
@@ -153,8 +192,14 @@ export default function CallsPage() {
                     <span className="text-text-secondary">—</span>
                   )}
                 </td>
+                <td className="p-4 font-mono text-xs text-text-secondary">{c.from_number ?? "—"}</td>
+                <td className="p-4 font-mono text-xs text-text-secondary">{c.to_number ?? "—"}</td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{c.client_phone ?? "—"}</td>
-                <td className="p-4">{LEAD_STATUS_LABELS[c.status] ?? c.status}</td>
+                <td className="p-4">
+                  {getCallStatusBadge(c.call_status) ?? (
+                    <span>{LEAD_STATUS_LABELS[c.status] ?? c.status}</span>
+                  )}
+                </td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{c.call_id ?? "—"}</td>
                 <td className="p-4 text-text-secondary max-w-[26rem] break-words">{c.comment ?? "—"}</td>
                 <td className="p-4">
@@ -170,7 +215,7 @@ export default function CallsPage() {
             ))}
             {calls.length === 0 ? (
               <tr className="border-t border-border">
-                <td className="p-4 text-text-secondary" colSpan={7}>
+                <td className="p-4 text-text-secondary" colSpan={9}>
                   Пока нет звонков (заявок с источником «телефония»). Ниже — сырые события webhook (если они приходили).
                 </td>
               </tr>
@@ -256,7 +301,11 @@ export default function CallsPage() {
                 <td className="p-4 font-mono text-xs text-text-secondary">{e.source}</td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{e.caller_phone ?? "—"}</td>
                 <td className="p-4 font-mono text-xs text-text-secondary">{e.call_id ?? "—"}</td>
-                <td className="p-4">{e.is_processed ? "ok" : "pending"}</td>
+                <td className="p-4">
+                  {getCallStatusBadge(e.event_status) ?? (
+                    <span>{e.is_processed ? "Обработан" : "В очереди"}</span>
+                  )}
+                </td>
                 <td className="p-4 text-error max-w-[18rem] break-words">{e.error ?? "—"}</td>
                 <td className="p-4">
                   {e.recording_url ? (

@@ -12,6 +12,10 @@ class TelephonyCallRow(BaseSchema):
     client_id: UUID | None
     client_name: str | None
     client_phone: str | None
+    from_number: str | None = None
+    to_number: str | None = None
+    direction: str | None = None
+    call_status: str | None = None
     comment: str | None
     recording_url: str | None
     converted_deal_id: UUID | None
@@ -25,6 +29,7 @@ class TelephonyWebhookEventRow(BaseSchema):
     error: str | None
     caller_phone: str | None
     call_id: str | None
+    event_status: str | None = None
     recording_url: str | None
     raw_payload: dict | None
 

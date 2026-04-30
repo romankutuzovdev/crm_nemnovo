@@ -139,11 +139,53 @@ async def list_calls(
     )
     rows = (await db.execute(stmt)).all()
     out: list[TelephonyCallRow] = []
+    def pick(d: dict, *keys: str):
+        for k in keys:
+            v = d.get(k)
+            if v not in (None, ""):
+                return v
+        return None
+
     for lead, client in rows:
         rp = lead.raw_payload or {}
         rec = None
+        from_number = None
+        to_number = None
+        direction = None
+        call_status = None
         if isinstance(rp, dict):
             rec = rp.get("recording_url") or rp.get("recording")
+            direction = pick(rp, "direction", "call_direction")
+            call_status = pick(rp, "status", "state", "result", "event", "call_event")
+            from_number = pick(
+                rp,
+                "from",
+                "from_number",
+                "caller_id",
+                "caller",
+                "ani",
+                "external_number",
+                "phone",
+                "client_phone",
+                "number",
+            )
+            to_number = pick(
+                rp,
+                "to",
+                "to_number",
+                "called",
+                "called_number",
+                "dst",
+                "did",
+                "line",
+                "virtual_number",
+            )
+            if isinstance(rp.get("call"), dict):
+                call = rp.get("call") or {}
+                from_number = from_number or pick(call, "from", "from_number", "caller", "phone")
+                to_number = to_number or pick(call, "to", "to_number", "called", "line", "virtual_number")
+                direction = direction or pick(call, "direction", "call_direction")
+                call_status = call_status or pick(call, "status", "state", "result", "event", "call_event")
         client_name = None
         client_phone = None
         if client is not None:
@@ -158,6 +200,10 @@ async def list_calls(
                 client_id=lead.client_id,
                 client_name=client_name,
                 client_phone=client_phone,
+                from_number=str(from_number) if from_number is not None else None,
+                to_number=str(to_number) if to_number is not None else None,
+                direction=str(direction) if direction is not None else None,
+                call_status=str(call_status) if call_status is not None else None,
                 comment=lead.comment,
                 recording_url=str(rec) if rec else None,
                 converted_deal_id=lead.converted_deal_id,
@@ -200,14 +246,17 @@ async def list_webhook_events(
         caller = None
         call_id = None
         rec = None
+        event_status = None
         if isinstance(rp, dict):
             caller = pick(rp, "caller_id", "caller", "from", "from_number", "ani", "external_number", "phone")
             call_id = pick(rp, "call_id", "callId", "callid", "session_id", "sessionId", "uuid", "id")
             rec = pick(rp, "recording_url", "recordingUrl", "record_url", "recordUrl", "recording", "record")
+            event_status = pick(rp, "status", "state", "result", "event", "call_event")
             if rec is None:
                 call = rp.get("call")
                 if isinstance(call, dict):
                     rec = pick(call, "recording_url", "recordingUrl", "recording")
+                    event_status = event_status or pick(call, "status", "state", "result", "event", "call_event")
         out.append(
             TelephonyWebhookEventRow(
                 webhook_id=l.id,
@@ -217,6 +266,7 @@ async def list_webhook_events(
                 error=l.error,
                 caller_phone=str(caller) if caller else None,
                 call_id=str(call_id) if call_id else None,
+                event_status=str(event_status) if event_status else None,
                 recording_url=str(rec) if rec else None,
                 raw_payload=rp if isinstance(rp, dict) else None,
             )

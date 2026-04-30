@@ -104,19 +104,22 @@ class IntegrationService:
                 }
 
         client_repo = ClientRepository(self.session)
-        try:
-            client = await client_repo.create(
-                first_name="Телефон",
-                last_name="Звонок",
-                phone=normalized_phone,
-                email=None,
-                source=LeadSource.TELEPHONY.value,
-            )
-        except ConflictError:
-            # Backward compatibility: if DB still has unique phone, bind lead to existing client.
-            client = await client_repo.find_by_phone(normalized_phone)
-            if client is None:
-                raise
+        client = await client_repo.find_by_phone(normalized_phone)
+        was_existing_client = client is not None
+        if client is None:
+            try:
+                client = await client_repo.create(
+                    first_name="Телефон",
+                    last_name="Звонок",
+                    phone=normalized_phone,
+                    email=None,
+                    source=LeadSource.TELEPHONY.value,
+                )
+            except ConflictError:
+                # Backward compatibility: if DB still has unique phone, bind lead to existing client.
+                client = await client_repo.find_by_phone(normalized_phone)
+                if client is None:
+                    raise
 
         lead = await lead_repo.create(
             client_id=client.id,
@@ -128,7 +131,7 @@ class IntegrationService:
             assigned_to=assignee,
         )
 
-        return {"status": "ok", "lead_id": str(lead.id), "client_found": True}
+        return {"status": "ok", "lead_id": str(lead.id), "client_found": was_existing_client}
 
     @staticmethod
     def _pick(payload: dict, *keys: str):

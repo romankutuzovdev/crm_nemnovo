@@ -18,9 +18,13 @@ class ClientRepository(BaseRepository[Client]):
 
     async def find_by_phone(self, phone: str) -> Client | None:
         result = await self.session.execute(
-            select(Client).options(*self._response_load_options()).where(Client.phone == phone)
+            select(Client)
+            .options(*self._response_load_options())
+            .where(Client.phone == phone)
+            .order_by(Client.created_at.desc())
+            .limit(1)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def find_by_email(self, email: str) -> Client | None:
         result = await self.session.execute(
