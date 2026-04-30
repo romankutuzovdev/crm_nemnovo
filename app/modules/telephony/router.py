@@ -25,6 +25,80 @@ def _pick_payload_value(payload: dict, *keys: str):
     return None
 
 
+def _normalize_direction(value: object | None) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip().lower()
+    if not raw:
+        return None
+    inbound = {
+        "in",
+        "incoming",
+        "inbound",
+        "inc",
+        "accept",
+        "accepted",
+        "answered",
+        "вход",
+        "входящий",
+        "вх",
+        "1",
+    }
+    outbound = {
+        "out",
+        "outgoing",
+        "outbound",
+        "originate",
+        "dialout",
+        "callout",
+        "исход",
+        "исходящий",
+        "исх",
+        "0",
+    }
+    if raw in inbound:
+        return "in"
+    if raw in outbound:
+        return "out"
+    return None
+
+
+def _extract_call_sides(payload: dict) -> tuple[str | None, str | None]:
+    from_number = _pick_payload_value(
+        payload,
+        "from",
+        "from_number",
+        "caller_id",
+        "caller",
+        "ani",
+        "external_number",
+        "phone",
+        "client_phone",
+        "number",
+        "src",
+        "src_number",
+    )
+    to_number = _pick_payload_value(
+        payload,
+        "to",
+        "to_number",
+        "called",
+        "called_number",
+        "dst",
+        "dst_number",
+        "did",
+        "line",
+        "virtual_number",
+        "telnum",
+        "diversion",
+        "ext",
+    )
+    return (
+        str(from_number) if from_number not in (None, "") else None,
+        str(to_number) if to_number not in (None, "") else None,
+    )
+
+
 async def _fetch_mts_history_sample(
     date_from: date | None = None,
     date_to: date | None = None,
@@ -142,33 +216,19 @@ def _extract_history_rows(sample: dict | list | str | None) -> list[dict]:
 
 def _normalize_mts_history_row(row: dict) -> dict:
     row_type = str(_pick_payload_value(row, "type", "event", "call_event") or "").strip().lower()
-    row_direction = str(_pick_payload_value(row, "direction", "call_direction") or "").strip().lower()
-    if not row_direction:
-        if row_type in {"in", "incoming", "accepted", "completed", "cancelled"}:
-            row_direction = "in"
-        elif row_type in {"out", "outgoing"}:
-            row_direction = "out"
-
-    caller_phone = _pick_payload_value(
-        row,
-        "phone",
-        "caller_id",
-        "caller",
-        "from",
-        "from_number",
-        "ani",
-        "external_number",
+    row_direction = _normalize_direction(
+        _pick_payload_value(
+            row,
+            "direction",
+            "call_direction",
+            "type",
+            "event",
+            "call_event",
+            "flow",
+            "disposition",
+        )
     )
-    to_number = _pick_payload_value(
-        row,
-        "telnum",
-        "diversion",
-        "ext",
-        "to",
-        "to_number",
-        "line",
-        "virtual_number",
-    )
+    caller_phone, to_number = _extract_call_sides(row)
     call_id = _pick_payload_value(row, "callid", "call_id", "callId", "session_id", "sessionId", "uuid", "id")
     recording = _pick_payload_value(row, "link", "recording_url", "recordingUrl", "record_url", "recording")
     call_status = _pick_payload_value(row, "status", "state", "result")
@@ -230,59 +290,55 @@ async def list_calls(
         call_status = None
         if isinstance(rp, dict):
             rec = rp.get("recording_url") or rp.get("recording")
-            direction = pick(rp, "direction", "call_direction")
+            direction = _normalize_direction(
+                pick(
+                    rp,
+                    "direction",
+                    "call_direction",
+                    "type",
+                    "event",
+                    "call_event",
+                    "flow",
+                    "disposition",
+                )
+            )
             call_status = pick(rp, "status", "state", "result", "event", "call_event")
-            from_number = pick(
-                rp,
-                "from",
-                "from_number",
-                "caller_id",
-                "caller",
-                "ani",
-                "external_number",
-                "phone",
-                "client_phone",
-                "number",
-            )
-            to_number = pick(
-                rp,
-                "to",
-                "to_number",
-                "called",
-                "called_number",
-                "dst",
-                "did",
-                "line",
-                "virtual_number",
-                "telnum",
-                "diversion",
-                "ext",
-            )
+            from_number, to_number = _extract_call_sides(rp)
             if isinstance(rp.get("call"), dict):
                 call = rp.get("call") or {}
-                from_number = from_number or pick(call, "from", "from_number", "caller", "phone")
-                to_number = to_number or pick(
-                    call,
-                    "to",
-                    "to_number",
-                    "called",
-                    "line",
-                    "virtual_number",
-                    "telnum",
-                    "diversion",
-                    "ext",
+                nested_from, nested_to = _extract_call_sides(call)
+                from_number = from_number or nested_from
+                to_number = to_number or nested_to
+                direction = direction or _normalize_direction(
+                    pick(
+                        call,
+                        "direction",
+                        "call_direction",
+                        "type",
+                        "event",
+                        "call_event",
+                        "flow",
+                        "disposition",
+                    )
                 )
-                direction = direction or pick(call, "direction", "call_direction")
                 call_status = call_status or pick(call, "status", "state", "result", "event", "call_event")
             if isinstance(rp.get("_normalized"), dict):
                 normalized = rp.get("_normalized") or {}
                 from_number = from_number or pick(normalized, "caller_phone", "from_number")
                 to_number = to_number or pick(normalized, "to_number", "line", "virtual_number", "telnum")
+                direction = direction or _normalize_direction(
+                    pick(normalized, "direction", "call_direction", "type", "event", "call_event")
+                )
         client_name = None
         client_phone = None
         if client is not None:
             client_name = f"{client.first_name} {client.last_name}".strip() or None
             client_phone = client.phone
+        if direction is None and client_phone:
+            if from_number and str(from_number) == str(client_phone):
+                direction = "in"
+            elif to_number and str(to_number) == str(client_phone):
+                direction = "out"
         out.append(
             TelephonyCallRow(
                 lead_id=lead.id,

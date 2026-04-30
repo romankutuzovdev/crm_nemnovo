@@ -30,6 +30,7 @@ function pickValue(obj: Record<string, unknown> | null | undefined, ...keys: str
 type DateProtoPatched = Date & {
   __minskTimezonePatched?: boolean;
 };
+const INCOMING_TOAST_TTL_MS = 15000;
 
 export default function DashboardLayout({
   children,
@@ -151,6 +152,12 @@ export default function DashboardLayout({
     "to",
     "to_number",
   );
+  const showIncomingToast = useMemo(() => {
+    if (!latestIncomingEvent?.created_at) return false;
+    const createdAtMs = new Date(latestIncomingEvent.created_at).getTime();
+    if (!Number.isFinite(createdAtMs)) return false;
+    return Date.now() - createdAtMs <= INCOMING_TOAST_TTL_MS;
+  }, [latestIncomingEvent?.created_at, telephonyEvents]);
 
   const playIncomingSound = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -264,7 +271,7 @@ export default function DashboardLayout({
           {children}
         </PageTransition>
       </main>
-      {latestIncomingEvent ? (
+      {showIncomingToast ? (
         <Link
           href="/dashboard/calls"
           className="fixed right-4 bottom-4 z-50 max-w-sm rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 shadow-lg backdrop-blur"

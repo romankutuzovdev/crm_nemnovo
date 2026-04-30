@@ -10,6 +10,78 @@ interface AssetCategory {
   name: string;
 }
 
+interface TransportRow {
+  id: string;
+  brand: string;
+  model: string | null;
+  plate_number: string | null;
+  seats: number | null;
+  organization: string | null;
+  trip_cost: number | null;
+  driver_details: string | null;
+  notes: string | null;
+  is_active: boolean;
+}
+
+interface InstructorRow {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  passport_details: string | null;
+  notes: string | null;
+  payout_per_trip: number;
+  payout_per_guest: number;
+  is_active: boolean;
+}
+
+interface GuideRow {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  passport_details: string | null;
+  notes: string | null;
+  is_active: boolean;
+}
+
+interface RoomRow {
+  id: string;
+  code: string;
+  title: string | null;
+  capacity: number;
+  floor: number | null;
+  base_price_per_night: number | null;
+  description: string | null;
+  is_active: boolean;
+}
+
+interface RouteRow {
+  id: string;
+  name: string;
+  duration_hours: number | null;
+  default_price_per_person: number | null;
+  description: string | null;
+  is_active: boolean;
+}
+
+interface AssetRow {
+  id: string;
+  name: string;
+  code: string;
+  capacity: number;
+  quantity: number;
+  status: string;
+  description: string | null;
+  category: AssetCategory;
+}
+
+function parseNumberish(value: string): number | null {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
 function Section({
   title,
   description,
@@ -76,10 +148,44 @@ export default function DirectoriesPage() {
     quantity: "1",
     description: "",
   });
+  const [categoryForm, setCategoryForm] = useState({
+    name: "",
+    description: "",
+  });
 
   const { data: assetCategories = [] } = useQuery({
     queryKey: ["directories", "asset-categories"],
     queryFn: () => apiFetch<AssetCategory[]>("/assets/categories", { token }),
+    enabled: !!token,
+  });
+  const { data: transports = [] } = useQuery({
+    queryKey: ["directories", "transport"],
+    queryFn: () => apiFetch<TransportRow[]>("/rafting/transport?offset=0&limit=200", { token }),
+    enabled: !!token,
+  });
+  const { data: instructors = [] } = useQuery({
+    queryKey: ["directories", "instructors"],
+    queryFn: () => apiFetch<InstructorRow[]>("/rafting/instructors?offset=0&limit=200", { token }),
+    enabled: !!token,
+  });
+  const { data: guides = [] } = useQuery({
+    queryKey: ["directories", "guides"],
+    queryFn: () => apiFetch<GuideRow[]>("/excursions/guides", { token }),
+    enabled: !!token,
+  });
+  const { data: rooms = [] } = useQuery({
+    queryKey: ["directories", "rooms"],
+    queryFn: () => apiFetch<RoomRow[]>("/hostel/rooms?offset=0&limit=200", { token }),
+    enabled: !!token,
+  });
+  const { data: routes = [] } = useQuery({
+    queryKey: ["directories", "routes"],
+    queryFn: () => apiFetch<RouteRow[]>("/rafting/routes?offset=0&limit=200", { token }),
+    enabled: !!token,
+  });
+  const { data: assets = [] } = useQuery({
+    queryKey: ["directories", "assets"],
+    queryFn: () => apiFetch<AssetRow[]>("/assets/?offset=0&limit=200", { token }),
     enabled: !!token,
   });
 
@@ -99,11 +205,10 @@ export default function DirectoriesPage() {
           plate_number: transportForm.plate_number.trim() || null,
           seats: transportForm.seats.trim() ? Math.max(1, parseInt(transportForm.seats, 10) || 1) : null,
           organization: transportForm.organization.trim() || null,
-          trip_cost: transportForm.trip_cost.trim()
-            ? Math.max(0, Number(transportForm.trip_cost.replace(",", ".")) || 0)
-            : null,
+          trip_cost: transportForm.trip_cost.trim() ? Math.max(0, parseNumberish(transportForm.trip_cost) ?? 0) : null,
           driver_details: transportForm.driver_details.trim() || null,
           notes: transportForm.notes.trim() || null,
+          is_active: true,
         }),
       }),
     onSuccess: async () => {
@@ -117,7 +222,7 @@ export default function DirectoriesPage() {
         driver_details: "",
         notes: "",
       });
-      await queryClient.invalidateQueries({ queryKey: ["rafting", "transport"] });
+      await queryClient.invalidateQueries({ queryKey: ["directories", "transport"] });
     },
   });
 
@@ -131,10 +236,9 @@ export default function DirectoriesPage() {
           phone: instructorForm.phone.trim() || null,
           passport_details: instructorForm.passport_details.trim() || null,
           notes: instructorForm.notes.trim() || null,
-          payout_per_trip: instructorForm.payout_per_trip.trim()
-            ? Number(instructorForm.payout_per_trip.replace(",", "."))
-            : 0,
+          payout_per_trip: parseNumberish(instructorForm.payout_per_trip) ?? 0,
           payout_per_guest: 0,
+          is_active: true,
         }),
       }),
     onSuccess: async () => {
@@ -145,7 +249,7 @@ export default function DirectoriesPage() {
         payout_per_trip: "",
         notes: "",
       });
-      await queryClient.invalidateQueries({ queryKey: ["rafting", "instructors"] });
+      await queryClient.invalidateQueries({ queryKey: ["directories", "instructors"] });
     },
   });
 
@@ -157,11 +261,14 @@ export default function DirectoriesPage() {
         body: JSON.stringify({
           full_name: guideForm.full_name.trim(),
           phone: guideForm.phone.trim() || null,
+          passport_details: null,
+          notes: null,
+          is_active: true,
         }),
       }),
     onSuccess: async () => {
       setGuideForm({ full_name: "", phone: "" });
-      await queryClient.invalidateQueries({ queryKey: ["excursions", "guides"] });
+      await queryClient.invalidateQueries({ queryKey: ["directories", "guides"] });
     },
   });
 
@@ -175,10 +282,9 @@ export default function DirectoriesPage() {
           title: roomForm.title.trim() || null,
           capacity: Math.max(1, parseInt(roomForm.capacity, 10) || 1),
           floor: roomForm.floor.trim() ? parseInt(roomForm.floor, 10) || null : null,
-          base_price_per_night: roomForm.base_price_per_night.trim()
-            ? Number(roomForm.base_price_per_night.replace(",", "."))
-            : null,
+          base_price_per_night: parseNumberish(roomForm.base_price_per_night),
           description: roomForm.description.trim() || null,
+          is_active: true,
         }),
       }),
     onSuccess: async () => {
@@ -190,7 +296,7 @@ export default function DirectoriesPage() {
         base_price_per_night: "",
         description: "",
       });
-      await queryClient.invalidateQueries({ queryKey: ["hostel", "rooms"] });
+      await queryClient.invalidateQueries({ queryKey: ["directories", "rooms"] });
     },
   });
 
@@ -201,14 +307,15 @@ export default function DirectoriesPage() {
         token,
         body: JSON.stringify({
           name: routeForm.name.trim(),
-          default_price_per_person: routeForm.default_price_per_person.trim()
-            ? Number(routeForm.default_price_per_person.replace(",", "."))
-            : null,
+          duration_hours: null,
+          default_price_per_person: parseNumberish(routeForm.default_price_per_person),
+          description: null,
+          is_active: true,
         }),
       }),
     onSuccess: async () => {
       setRouteForm({ name: "", default_price_per_person: "" });
-      await queryClient.invalidateQueries({ queryKey: ["rafting", "routes"] });
+      await queryClient.invalidateQueries({ queryKey: ["directories", "routes"] });
     },
   });
 
@@ -235,7 +342,23 @@ export default function DirectoriesPage() {
         quantity: "1",
         description: "",
       });
-      await queryClient.invalidateQueries({ queryKey: ["assets"] });
+      await queryClient.invalidateQueries({ queryKey: ["directories", "assets"] });
+    },
+  });
+  const createCategory = useMutation({
+    mutationFn: () =>
+      apiFetch<AssetCategory>("/assets/categories", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          name: categoryForm.name.trim(),
+          description: categoryForm.description.trim() || null,
+        }),
+      }),
+    onSuccess: async (created) => {
+      setCategoryForm({ name: "", description: "" });
+      setAssetForm((s) => ({ ...s, category_id: String(created.id) }));
+      await queryClient.invalidateQueries({ queryKey: ["directories", "asset-categories"] });
     },
   });
 
@@ -254,10 +377,36 @@ export default function DirectoriesPage() {
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Мест" value={transportForm.seats} onChange={(e) => setTransportForm((s) => ({ ...s, seats: e.target.value }))} />
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Организация" value={transportForm.organization} onChange={(e) => setTransportForm((s) => ({ ...s, organization: e.target.value }))} />
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Стоимость рейса" value={transportForm.trip_cost} onChange={(e) => setTransportForm((s) => ({ ...s, trip_cost: e.target.value }))} />
+          <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 md:col-span-3" placeholder="Данные водителя" value={transportForm.driver_details} onChange={(e) => setTransportForm((s) => ({ ...s, driver_details: e.target.value }))} />
+          <textarea className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 md:col-span-3" placeholder="Примечание" value={transportForm.notes} onChange={(e) => setTransportForm((s) => ({ ...s, notes: e.target.value }))} />
         </div>
         <button className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white" disabled={!transportForm.brand.trim() || createTransport.isPending} onClick={() => createTransport.mutate()}>
           {createTransport.isPending ? "Сохранение..." : "Добавить транспорт"}
         </button>
+        <div className="rounded-lg border border-slate-700 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr>
+                <th className="text-left p-2">Транспорт</th>
+                <th className="text-left p-2">Номер</th>
+                <th className="text-left p-2">Мест</th>
+                <th className="text-left p-2">Рейс</th>
+                <th className="text-left p-2">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transports.map((item) => (
+                <tr key={item.id} className="border-t border-slate-700">
+                  <td className="p-2">{[item.brand, item.model].filter(Boolean).join(" ")}</td>
+                  <td className="p-2">{item.plate_number || "-"}</td>
+                  <td className="p-2">{item.seats ?? "-"}</td>
+                  <td className="p-2">{item.trip_cost ?? "-"}</td>
+                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section title="Инструкторы" description="Инструкторы для сплавов.">
@@ -265,10 +414,36 @@ export default function DirectoriesPage() {
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="ФИО *" value={instructorForm.full_name} onChange={(e) => setInstructorForm((s) => ({ ...s, full_name: e.target.value }))} />
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Телефон" value={instructorForm.phone} onChange={(e) => setInstructorForm((s) => ({ ...s, phone: e.target.value }))} />
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Оплата за выезд" value={instructorForm.payout_per_trip} onChange={(e) => setInstructorForm((s) => ({ ...s, payout_per_trip: e.target.value }))} />
+          <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 md:col-span-3" placeholder="Паспортные данные" value={instructorForm.passport_details} onChange={(e) => setInstructorForm((s) => ({ ...s, passport_details: e.target.value }))} />
+          <textarea className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 md:col-span-3" placeholder="Примечание" value={instructorForm.notes} onChange={(e) => setInstructorForm((s) => ({ ...s, notes: e.target.value }))} />
         </div>
         <button className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white" disabled={!instructorForm.full_name.trim() || createInstructor.isPending} onClick={() => createInstructor.mutate()}>
           {createInstructor.isPending ? "Сохранение..." : "Добавить инструктора"}
         </button>
+        <div className="rounded-lg border border-slate-700 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr>
+                <th className="text-left p-2">ФИО</th>
+                <th className="text-left p-2">Телефон</th>
+                <th className="text-left p-2">За выезд</th>
+                <th className="text-left p-2">За гостя</th>
+                <th className="text-left p-2">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {instructors.map((item) => (
+                <tr key={item.id} className="border-t border-slate-700">
+                  <td className="p-2">{item.full_name}</td>
+                  <td className="p-2">{item.phone || "-"}</td>
+                  <td className="p-2">{item.payout_per_trip}</td>
+                  <td className="p-2">{item.payout_per_guest}</td>
+                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section title="Экскурсоводы" description="Справочник экскурсоводов.">
@@ -279,6 +454,26 @@ export default function DirectoriesPage() {
         <button className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white" disabled={!guideForm.full_name.trim() || createGuide.isPending} onClick={() => createGuide.mutate()}>
           {createGuide.isPending ? "Сохранение..." : "Добавить экскурсовода"}
         </button>
+        <div className="rounded-lg border border-slate-700 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr>
+                <th className="text-left p-2">ФИО</th>
+                <th className="text-left p-2">Телефон</th>
+                <th className="text-left p-2">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {guides.map((item) => (
+                <tr key={item.id} className="border-t border-slate-700">
+                  <td className="p-2">{item.full_name}</td>
+                  <td className="p-2">{item.phone || "-"}</td>
+                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section title="Отель (номера)" description="Номера для бронирования в хостеле/отеле.">
@@ -286,10 +481,37 @@ export default function DirectoriesPage() {
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Код номера *" value={roomForm.code} onChange={(e) => setRoomForm((s) => ({ ...s, code: e.target.value }))} />
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Название" value={roomForm.title} onChange={(e) => setRoomForm((s) => ({ ...s, title: e.target.value }))} />
           <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Вместимость" value={roomForm.capacity} onChange={(e) => setRoomForm((s) => ({ ...s, capacity: e.target.value }))} />
+          <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Этаж" value={roomForm.floor} onChange={(e) => setRoomForm((s) => ({ ...s, floor: e.target.value }))} />
+          <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Цена за ночь" value={roomForm.base_price_per_night} onChange={(e) => setRoomForm((s) => ({ ...s, base_price_per_night: e.target.value }))} />
+          <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Описание" value={roomForm.description} onChange={(e) => setRoomForm((s) => ({ ...s, description: e.target.value }))} />
         </div>
         <button className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white" disabled={!roomForm.code.trim() || createRoom.isPending} onClick={() => createRoom.mutate()}>
           {createRoom.isPending ? "Сохранение..." : "Добавить номер"}
         </button>
+        <div className="rounded-lg border border-slate-700 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr>
+                <th className="text-left p-2">Код</th>
+                <th className="text-left p-2">Название</th>
+                <th className="text-left p-2">Мест</th>
+                <th className="text-left p-2">Цена/ночь</th>
+                <th className="text-left p-2">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rooms.map((item) => (
+                <tr key={item.id} className="border-t border-slate-700">
+                  <td className="p-2">{item.code}</td>
+                  <td className="p-2">{item.title || "-"}</td>
+                  <td className="p-2">{item.capacity}</td>
+                  <td className="p-2">{item.base_price_per_night ?? "-"}</td>
+                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section title="Сплавы (маршруты)" description="Маршруты для сплавов.">
@@ -300,9 +522,38 @@ export default function DirectoriesPage() {
         <button className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white" disabled={!routeForm.name.trim() || createRoute.isPending} onClick={() => createRoute.mutate()}>
           {createRoute.isPending ? "Сохранение..." : "Добавить маршрут"}
         </button>
+        <div className="rounded-lg border border-slate-700 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr>
+                <th className="text-left p-2">Маршрут</th>
+                <th className="text-left p-2">Длительность</th>
+                <th className="text-left p-2">Цена</th>
+                <th className="text-left p-2">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {routes.map((item) => (
+                <tr key={item.id} className="border-t border-slate-700">
+                  <td className="p-2">{item.name}</td>
+                  <td className="p-2">{item.duration_hours ?? "-"}</td>
+                  <td className="p-2">{item.default_price_per_person ?? "-"}</td>
+                  <td className="p-2">{item.is_active ? "Активен" : "Отключен"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section title="Активы" description="Любые активы из категорий (байдарки, экипировка и т.д.).">
+        <div className="grid gap-2 md:grid-cols-3">
+          <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" placeholder="Новая категория *" value={categoryForm.name} onChange={(e) => setCategoryForm((s) => ({ ...s, name: e.target.value }))} />
+          <input className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 md:col-span-2" placeholder="Описание категории" value={categoryForm.description} onChange={(e) => setCategoryForm((s) => ({ ...s, description: e.target.value }))} />
+        </div>
+        <button className="px-4 py-2 rounded-lg border border-slate-600 hover:border-slate-500 disabled:opacity-50 text-white" disabled={!categoryForm.name.trim() || createCategory.isPending} onClick={() => createCategory.mutate()}>
+          {createCategory.isPending ? "Сохранение..." : "Добавить категорию"}
+        </button>
         <div className="grid gap-2 md:grid-cols-3">
           <select className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600" value={assetForm.category_id} onChange={(e) => setAssetForm((s) => ({ ...s, category_id: e.target.value }))}>
             <option value="">Категория *</option>
@@ -321,6 +572,30 @@ export default function DirectoriesPage() {
         <button className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white" disabled={!canCreateAsset || createAsset.isPending} onClick={() => createAsset.mutate()}>
           {createAsset.isPending ? "Сохранение..." : "Добавить актив"}
         </button>
+        <div className="rounded-lg border border-slate-700 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900/70">
+              <tr>
+                <th className="text-left p-2">Категория</th>
+                <th className="text-left p-2">Название</th>
+                <th className="text-left p-2">Код</th>
+                <th className="text-left p-2">Кол-во</th>
+                <th className="text-left p-2">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {assets.map((item) => (
+                <tr key={item.id} className="border-t border-slate-700">
+                  <td className="p-2">{item.category.name}</td>
+                  <td className="p-2">{item.name}</td>
+                  <td className="p-2">{item.code}</td>
+                  <td className="p-2">{item.quantity}</td>
+                  <td className="p-2">{item.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Section>
     </div>
   );
