@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 
@@ -60,6 +60,12 @@ export default function AssetsPage() {
 
   const assets = data ?? [];
   const defaultCategoryId = categories[0]?.id ?? null;
+
+  useEffect(() => {
+    if (!createForm.category_id && defaultCategoryId != null) {
+      setCreateForm((prev) => ({ ...prev, category_id: String(defaultCategoryId) }));
+    }
+  }, [createForm.category_id, defaultCategoryId]);
 
   const canCreate = useMemo(() => {
     return (
@@ -126,9 +132,7 @@ export default function AssetsPage() {
             value={createForm.category_id}
             onChange={(e) => setCreateForm((s) => ({ ...s, category_id: e.target.value }))}
           >
-            {defaultCategoryId != null && !createForm.category_id && (
-              <option value="">Категория (по умолчанию: {categories[0]?.name})</option>
-            )}
+            {!categories.length && <option value="">Нет категорий</option>}
             {categories.map((c) => (
               <option key={c.id} value={String(c.id)}>
                 {c.name}

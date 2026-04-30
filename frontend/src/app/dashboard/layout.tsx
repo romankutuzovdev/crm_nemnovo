@@ -168,6 +168,7 @@ export default function DashboardLayout({
     { href: "/dashboard/rent", label: "Аренда" },
     { href: "/dashboard/payments", label: "Оплаты" },
     { href: "/dashboard/assets", label: "Активы" },
+    { href: "/dashboard/directories", label: "Справочники" },
     { href: "/dashboard/stock", label: "Склад" },
     { href: "/dashboard/reports", label: "Отчёты" },
     ...(user.role?.name === "director" || user.role?.name === "admin"

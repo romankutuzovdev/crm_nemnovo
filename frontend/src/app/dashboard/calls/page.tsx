@@ -34,14 +34,6 @@ interface WebhookEventRow {
   recording_url: string | null;
 }
 
-interface MtsHistoryResponse {
-  ok: boolean;
-  message: string;
-  tried: string[];
-  status_code: number | null;
-  sample: any;
-}
-
 interface MtsImportResponse {
   ok: boolean;
   message: string;
@@ -141,13 +133,6 @@ export default function CallsPage() {
     enabled: !!token,
   });
 
-  const { data: mtsHistory, isFetching: mtsFetching } = useQuery({
-    queryKey: ["calls", "mts", "history"],
-    queryFn: () => apiFetch<MtsHistoryResponse>("/telephony/mts/history", { token }),
-    enabled: !!token,
-    retry: false,
-  });
-
   const importHistory = useMutation({
     mutationFn: () => apiFetch<MtsImportResponse>("/telephony/mts/import-history", { method: "POST", token }),
     onSuccess: async () => {
@@ -173,7 +158,7 @@ export default function CallsPage() {
         >
           {importHistory.isPending ? "Импорт…" : "Импортировать историю MTS"}
         </button>
-        {isFetching || eventsFetching || mtsFetching ? (
+        {isFetching || eventsFetching ? (
           <span className="text-xs text-text-secondary pt-2">Загрузка…</span>
         ) : null}
       </div>
@@ -258,55 +243,6 @@ export default function CallsPage() {
             ) : null}
           </tbody>
         </table>
-      </div>
-
-      <div className="rounded-xl border border-border bg-surface overflow-hidden">
-        <div className="p-4 border-b border-border">
-          <h2 className="font-semibold">История из MTS VATS API</h2>
-          <p className="text-xs text-text-secondary mt-1">
-            Это попытка прочитать историю звонков напрямую из API АТС (без webhooks). Если API не настроен или не пускает — здесь будет ошибка.
-          </p>
-        </div>
-        <div className="p-4 space-y-3">
-          {mtsHistory === undefined && !mtsFetching ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600">
-              Не удалось загрузить данные. Чаще всего причина — ошибка API (401/403/500) или нет прав на{" "}
-              <code className="font-mono">integrations:read</code>. Откройте DevTools → Network и посмотрите ответ{" "}
-              <code className="font-mono">/api/v1/telephony/mts/history</code>.
-            </div>
-          ) : null}
-          <div className="text-sm">
-            <span className="text-text-secondary">Статус:</span>{" "}
-            <span className={mtsHistory?.ok ? "text-emerald-500" : "text-amber-500"}>
-              {mtsHistory ? (mtsHistory.ok ? "OK" : "Ошибка") : "—"}
-            </span>
-            {mtsHistory?.status_code != null ? (
-              <span className="text-text-secondary"> · HTTP {mtsHistory.status_code}</span>
-            ) : null}
-          </div>
-          {mtsHistory?.message ? <div className="text-sm text-text-secondary">{mtsHistory.message}</div> : null}
-
-          {mtsHistory?.sample != null ? (
-            <pre className="text-xs overflow-x-auto p-3 rounded-lg bg-surface-hover border border-border text-text-secondary whitespace-pre-wrap">
-              {JSON.stringify(mtsHistory.sample, null, 2)}
-            </pre>
-          ) : (
-            <p className="text-xs text-text-secondary">Нет данных.</p>
-          )}
-
-          {mtsHistory?.tried?.length ? (
-            <details className="text-xs text-text-secondary">
-              <summary className="cursor-pointer">Что пробовали (debug)</summary>
-              <ul className="mt-2 space-y-1">
-                {mtsHistory.tried.slice(-20).map((t, i) => (
-                  <li key={i} className="font-mono">
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-        </div>
       </div>
 
       <div className="rounded-xl border border-border overflow-hidden bg-surface">
