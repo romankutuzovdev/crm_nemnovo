@@ -67,15 +67,69 @@ class IntegrationService:
             raise
 
     async def _process_telephony_payload(self, payload: dict, caller_phone: str) -> dict:
-        # Per current business rule, telephony webhook must not create/update leads in DB.
-        # We keep webhook logging only (handled by caller methods).
-        call_id = payload.get("call_id") or payload.get("callId") or payload.get("id")
-        return {
-            "status": "ignored",
-            "reason": "lead_creation_disabled",
-            "call_id": str(call_id) if call_id is not None else None,
-            "caller_phone": str(caller_phone) if caller_phone else None,
-        }
+        from app.core.exceptions import ConflictError
+        from app.modules.clients.repository import ClientRepository
+        from app.modules.leads.repository import LeadRepository
+        from app.shared.enums import LeadSource, LeadStatus
+        from app.shared.utils import normalize_phone
+
+        normalized_phone = normalize_phone(caller_phone)
+        call_id = (
+            payload.get("call_id")
+            or payload.get("callId")
+            or payload.get("callid")
+            or payload.get("session_id")
+            or payload.get("sessionId")
+            or payload.get("uuid")
+            or payload.get("id")
+        )
+        payload_for_storage = payload.get("raw_payload") or payload
+        telephony_comment = (
+            payload.get("comment")
+            or payload.get("event")
+            or payload.get("status")
+            or payload.get("direction")
+        )
+
+        lead_repo = LeadRepository(self.session)
+        if call_id:
+            existing = await lead_repo.find_by_source_ref(LeadSource.TELEPHONY.value, str(call_id))
+            if existing:
+                if telephony_comment:
+                    existing.comment = str(telephony_comment)
+                existing.raw_payload = payload_for_storage
+                await self.session.flush()
+                return {"status": "ok", "lead_id": str(existing.id), "client_found": existing.client_id is not None}
+
+        client_repo = ClientRepository(self.session)
+        client = await client_repo.find_by_phone(normalized_phone)
+        was_existing_client = client is not None
+        if client is None:
+            try:
+                client = await client_repo.create(
+                    first_name="Телефон",
+                    last_name="Звонок",
+                    phone=normalized_phone,
+                    email=None,
+                    source=LeadSource.TELEPHONY.value,
+                )
+            except ConflictError:
+                client = await client_repo.find_by_phone(normalized_phone)
+                if client is None:
+                    raise
+
+        assignee = await self.lead_service.pick_assignee_by_load()
+        lead = await lead_repo.create(
+            client_id=client.id,
+            source=LeadSource.TELEPHONY,
+            source_ref=str(call_id) if call_id is not None else None,
+            status=LeadStatus.NEW,
+            comment=str(telephony_comment) if telephony_comment else None,
+            raw_payload=payload_for_storage,
+            assigned_to=assignee,
+        )
+        await self.session.flush()
+        return {"status": "ok", "lead_id": str(lead.id), "client_found": was_existing_client}
 
     @staticmethod
     def _pick(payload: dict, *keys: str):

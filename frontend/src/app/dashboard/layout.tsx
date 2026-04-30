@@ -72,15 +72,6 @@ export default function DashboardLayout({
     }
   };
 
-  if (!_hasHydrated) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-4">
-        <p className="text-text-secondary text-sm">Загрузка…</p>
-      </main>
-    );
-  }
-  if (!user) return null;
-
   const navActive = (href: string) =>
     href === "/dashboard"
       ? pathname === "/dashboard"
@@ -176,6 +167,15 @@ export default function DashboardLayout({
       : []),
     { href: "/dashboard/settings", label: "Настройки" },
   ];
+
+  if (!_hasHydrated) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-4">
+        <p className="text-text-secondary text-sm">Загрузка…</p>
+      </main>
+    );
+  }
+  if (!user) return null;
 
   return (
     <div className="min-h-screen flex">
