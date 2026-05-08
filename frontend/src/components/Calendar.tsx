@@ -1532,35 +1532,68 @@ export default function Calendar() {
       const token = getToken();
       if (!token) return;
       try {
-        const [clientsRes, assetsRes, roomsRes, rentCatalogRes, guidesRes, raftingRoutesRes] = await Promise.all([
-          apiFetch<Paginated<Client>>("/clients/", { token }),
-          apiFetch<Asset[] | Paginated<Asset>>("/assets/", { token }),
-          apiFetch<HostelRoom[]>("/hostel/rooms?limit=200", { token }),
-          apiFetch<RentCatalogItem[]>("/rent/catalog?limit=200", { token }),
-          apiFetch<ExcursionGuideRow[]>("/excursions/guides", { token }),
-          apiFetch<RaftingRouteRow[]>("/rafting/routes?limit=200", { token }),
-        ]);
-        setClients((clientsRes as Paginated<Client>).items ?? []);
-        const assetsList = Array.isArray(assetsRes) ? assetsRes : [];
+        const [clientsRes, assetsRes, roomsRes, rentCatalogRes, guidesRes, raftingRoutesRes] =
+          await Promise.allSettled([
+            apiFetch<Paginated<Client>>("/clients/", { token }),
+            apiFetch<Asset[] | Paginated<Asset>>("/assets/", { token }),
+            apiFetch<HostelRoom[]>("/hostel/rooms?limit=200", { token }),
+            apiFetch<RentCatalogItem[]>("/rent/catalog?limit=200", { token }),
+            apiFetch<ExcursionGuideRow[]>("/excursions/guides", { token }),
+            apiFetch<RaftingRouteRow[]>("/rafting/routes?limit=200", { token }),
+          ]);
+
+        const clientsData =
+          clientsRes.status === "fulfilled" ? (clientsRes.value as Paginated<Client>).items ?? [] : [];
+        const assetsDataRaw = assetsRes.status === "fulfilled" ? assetsRes.value : [];
+        const roomsData = roomsRes.status === "fulfilled" ? roomsRes.value : [];
+        const rentCatalogData = rentCatalogRes.status === "fulfilled" ? rentCatalogRes.value : [];
+        const guidesData = guidesRes.status === "fulfilled" ? guidesRes.value : [];
+        const raftingRoutesData = raftingRoutesRes.status === "fulfilled" ? raftingRoutesRes.value ?? [] : [];
+
+        setClients(clientsData);
+        const assetsList = Array.isArray(assetsDataRaw)
+          ? assetsDataRaw
+          : Array.isArray((assetsDataRaw as Paginated<Asset>)?.items)
+            ? (assetsDataRaw as Paginated<Asset>).items
+            : [];
         setAssets(assetsList);
-        setExcursionGuides((guidesRes ?? []).slice().sort((a, b) => a.full_name.localeCompare(b.full_name, "ru")));
-        const raftingItems: ServiceCatalogOption[] = (raftingRoutesRes ?? [])
-          .filter((route) => route.is_active)
-          .map((route) => ({
-            id: `rafting-route:${route.id}`,
-            service_type: "rafting",
-            label: route.name,
-            description: route.name,
-            unit_price: Number(route.default_price_per_person ?? 0),
-          }));
-        const hostelItems: ServiceCatalogOption[] = roomsRes.map((room) => ({
+        setExcursionGuides((guidesData ?? []).slice().sort((a, b) => a.full_name.localeCompare(b.full_name, "ru")));
+        const raftingItems: ServiceCatalogOption[] =
+          raftingRoutesData.length > 0
+            ? raftingRoutesData
+                .filter((route) => route.is_active)
+                .map((route) => ({
+                  id: `rafting-route:${route.id}`,
+                  service_type: "rafting",
+                  label: route.name,
+                  description: route.name,
+                  unit_price: Number(route.default_price_per_person ?? 0),
+                }))
+            : assetsList
+                .filter((asset) => {
+                  const haystack = `${asset.name} ${asset.code} ${asset.category?.name ?? ""}`.toLowerCase();
+                  return (
+                    haystack.includes("kayak") ||
+                    haystack.includes("байдар") ||
+                    haystack.includes("рафт") ||
+                    haystack.includes("сплав")
+                  );
+                })
+                .map((asset) => ({
+                  id: `rafting:${asset.id}`,
+                  service_type: "rafting",
+                  label: `${asset.name} (${asset.code})`,
+                  description: asset.name,
+                  unit_price: 0,
+                }));
+        const hostelItems: ServiceCatalogOption[] = roomsData.map((room) => ({
           id: `hostel:${room.id}`,
           service_type: "hostel",
           label: `${room.code}${room.title ? ` - ${room.title}` : ""}`,
           description: room.title?.trim() || `Проживание в номере ${room.code}`,
           unit_price: Number(room.base_price_per_night ?? 0),
         }));
-        const rentItems: ServiceCatalogOption[] = rentCatalogRes.map((item) => ({
+        const rentItems: ServiceCatalogOption[] = rentCatalogData.map((item) => ({
           id: `rent:${item.id}`,
           service_type: "rent",
           label: item.name,
