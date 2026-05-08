@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.modules.contracts.models import Contract
+from app.modules.clients.models import Client
 from app.modules.deals.models import Deal, DealItem
 from app.shared.base_repository import BaseRepository
 from app.shared.enums import DealStatus
@@ -17,7 +18,7 @@ class DealRepository(BaseRepository[Deal]):
     @staticmethod
     def _response_load_options():
         return (
-            selectinload(Deal.client),
+            selectinload(Deal.client).selectinload(Client.company),
             selectinload(Deal.assigned_user),
             selectinload(Deal.items).selectinload(DealItem.item_client),
             selectinload(Deal.bookings),

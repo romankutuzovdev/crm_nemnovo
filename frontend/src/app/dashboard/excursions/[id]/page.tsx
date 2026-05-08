@@ -323,7 +323,7 @@ export default function ExcursionDetailPage() {
         <p className="text-slate-400 text-sm mt-1">
           <span className="text-slate-500">Плательщик: </span>
           {ex.payer_company?.name ?? ex.payer_company_name ?? "—"}
-          {ex.payer_company?.inn ? ` · ИНН ${ex.payer_company.inn}` : ""}
+          {ex.payer_company?.inn ? ` · УНП ${ex.payer_company.inn}` : ""}
         </p>
       </div>
 
@@ -367,7 +367,7 @@ export default function ExcursionDetailPage() {
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
-                  {c.inn ? ` · ИНН ${c.inn}` : ""}
+                  {c.inn ? ` · УНП ${c.inn}` : ""}
                 </option>
               ))}
             </select>

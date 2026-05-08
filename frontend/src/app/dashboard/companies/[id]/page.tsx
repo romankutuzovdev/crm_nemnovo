@@ -143,7 +143,7 @@ export default function CompanyDetailPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">ИНН</label>
+              <label className="block text-sm text-slate-400 mb-1">УНП</label>
               <input
                 value={edit.inn}
                 onChange={(e) => setEdit((s) => ({ ...s, inn: e.target.value }))}
@@ -205,7 +205,7 @@ export default function CompanyDetailPage() {
               {SEGMENT_LABELS[company.segment] ?? company.segment}
             </div>
             <div>
-              <span className="text-slate-400">ИНН:</span> {company.inn || "—"}
+              <span className="text-slate-400">УНП:</span> {company.inn || "—"}
             </div>
             <div>
               <span className="text-slate-400">Телефон:</span> {company.phone || "—"}

@@ -343,7 +343,7 @@ export default function ExcursionsPage() {
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
-                {c.inn ? ` · ИНН ${c.inn}` : ""}
+                {c.inn ? ` · УНП ${c.inn}` : ""}
               </option>
             ))}
           </select>

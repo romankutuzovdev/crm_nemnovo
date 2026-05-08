@@ -109,7 +109,7 @@ export default function CompaniesPage() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск: название, ИНН…"
+            placeholder="Поиск: название, УНП…"
             className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-sm min-w-[220px] flex-1 sm:flex-none"
           />
           <button
@@ -137,7 +137,7 @@ export default function CompaniesPage() {
               <tr>
                 <th className="text-left p-4">Название</th>
                 <th className="text-left p-4">Тип</th>
-                <th className="text-left p-4">ИНН</th>
+                <th className="text-left p-4">УНП</th>
                 <th className="text-left p-4">Телефон</th>
               </tr>
             </thead>
@@ -180,7 +180,7 @@ export default function CompaniesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">ИНН</label>
+                  <label className="block text-sm text-slate-400 mb-1">УНП</label>
                   <input
                     className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600"
                     value={createForm.inn}

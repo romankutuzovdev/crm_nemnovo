@@ -11,6 +11,7 @@ from app.core.exceptions import AssetConflictError, NotFoundError, ValidationErr
 from app.modules.assets.repository import AssetRepository
 from app.modules.bookings.models import Booking
 from app.modules.clients.repository import ClientRepository
+from app.modules.clients.repository import CompanyRepository
 from app.modules.contracts.repository import ContractRepository
 from app.modules.deals.models import Deal, DealItem
 from app.modules.deals.repository import DealItemRepository, DealRepository
@@ -95,8 +96,32 @@ class DealService:
         return await self.get_deal(deal_id)
 
     async def create_deal(self, data: DealCreate, created_by: UUID) -> Deal:
-        # Validate client exists
-        await self.client_repo.get_or_raise(data.client_id)
+        # Resolve client: explicit client_id or company representative.
+        resolved_client_id = data.client_id
+        if resolved_client_id is None and data.company_id is None:
+            raise ValidationError("Укажите клиента или компанию для заказа")
+        if data.company_id is not None:
+            company = await CompanyRepository(self.session).get_or_raise(data.company_id)
+            company_clients = await self.client_repo.list_by_company(company.id, limit=1)
+            if company_clients:
+                resolved_client_id = company_clients[0].id
+            else:
+                # Create technical contact for company so Deal keeps FK to clients.
+                created_client = await self.client_repo.create(
+                    first_name="Компания",
+                    last_name=company.name,
+                    phone=(company.phone or f"company-{str(company.id)[:8]}"),
+                    email=None,
+                    company_id=company.id,
+                    source="manual",
+                    comment="Автосоздано при оформлении заказа на компанию",
+                    tags=[],
+                    assigned_to=None,
+                )
+                resolved_client_id = created_client.id
+        if resolved_client_id is None:
+            raise ValidationError("Не удалось определить клиента для заказа")
+        await self.client_repo.get_or_raise(resolved_client_id)
 
         if data.end_date < data.start_date:
             raise ValidationError("Дата окончания не может быть раньше даты начала")
@@ -136,7 +161,7 @@ class DealService:
             number = await self.repo.get_next_number()
             deal = Deal(
                 number=number,
-                client_id=data.client_id,
+                client_id=resolved_client_id,
                 lead_id=data.lead_id,
                 service_type=data.service_type,
                 tour_title=data.tour_title,

@@ -72,7 +72,8 @@ class BookingInDealCreate(BaseSchema):
 
 
 class DealCreate(BaseSchema):
-    client_id: UUID
+    client_id: UUID | None = None
+    company_id: UUID | None = None
     lead_id: UUID | None = None
     service_type: ServiceType
     tour_title: str | None = None

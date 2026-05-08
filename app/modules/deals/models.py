@@ -76,6 +76,8 @@ class Deal(Base):
         c = self.client
         if c is None:
             return None
+        if c.company is not None and c.company.name:
+            return c.company.name
         return f"{c.first_name} {c.last_name}".strip()
 
     @property

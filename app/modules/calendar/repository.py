@@ -339,7 +339,9 @@ class CalendarRepository:
                 and_(
                     Lead.status.in_([LeadStatus.REJECTED])
                     if include_archived
-                    else Lead.status.in_([LeadStatus.NEW, LeadStatus.IN_PROGRESS]),
+                    else Lead.status.in_(
+                        [LeadStatus.NEW, LeadStatus.IN_PROGRESS, LeadStatus.CONVERTED]
+                    ),
                     or_(
                         and_(Lead.preferred_date.isnot(None), Lead.preferred_date >= start, Lead.preferred_date <= end),
                         and_(Lead.preferred_date.is_(None), func.date(Lead.created_at) >= start, func.date(Lead.created_at) <= end),

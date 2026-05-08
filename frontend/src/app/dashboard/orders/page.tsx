@@ -34,6 +34,13 @@ interface ClientPickRow {
   phone: string;
 }
 
+interface CompanyPickRow {
+  id: string;
+  name: string;
+  inn?: string | null;
+  phone?: string | null;
+}
+
 const ORDER_STATUS_LABELS: Record<string, string> = {
   new: "Новый",
   confirmed: "Подтверждён",
@@ -86,6 +93,8 @@ export default function OrdersPage() {
   const [clientSearch, setClientSearch] = useState("");
   const [debouncedClientSearch, setDebouncedClientSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState<ClientPickRow | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<CompanyPickRow | null>(null);
+  const [customerType, setCustomerType] = useState<"client" | "company">("client");
   const [serviceType, setServiceType] = useState("rafting");
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -107,6 +116,16 @@ export default function OrdersPage() {
     enabled: !!token && showCreate,
   });
   const clientPickList = clientPickData?.items ?? [];
+  const { data: companyPickData } = useQuery({
+    queryKey: ["companies-pick", debouncedClientSearch],
+    queryFn: () =>
+      apiFetch<Paginated<CompanyPickRow>>(
+        `/companies/?search=${encodeURIComponent(debouncedClientSearch)}&limit=20`,
+        { token }
+      ),
+    enabled: !!token && showCreate && customerType === "company",
+  });
+  const companyPickList = companyPickData?.items ?? [];
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["orders", listView],
@@ -125,7 +144,8 @@ export default function OrdersPage() {
         method: "POST",
         token,
         body: JSON.stringify({
-          client_id: selectedClient!.id,
+          client_id: customerType === "client" ? selectedClient!.id : null,
+          company_id: customerType === "company" ? selectedCompany!.id : null,
           lead_id: null,
           service_type: serviceType,
           start_date: startDate,
@@ -135,7 +155,7 @@ export default function OrdersPage() {
           items: [
             {
               description: "Заказ",
-              client_id: selectedClient!.id,
+              client_id: customerType === "client" ? selectedClient!.id : null,
               item_kind: "primary",
               quantity: 1,
               unit_price: Number(amount),
@@ -152,6 +172,8 @@ export default function OrdersPage() {
       setShowCreate(false);
       setClientSearch("");
       setSelectedClient(null);
+      setSelectedCompany(null);
+      setCustomerType("client");
       setNotes("");
       queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
@@ -188,6 +210,8 @@ export default function OrdersPage() {
           onClick={() => {
             setClientSearch("");
             setSelectedClient(null);
+            setSelectedCompany(null);
+            setCustomerType("client");
             setShowCreate(true);
           }}
           className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 text-white text-sm font-medium"
@@ -309,8 +333,38 @@ export default function OrdersPage() {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="block text-sm text-slate-400 mb-1">Клиент</label>
-                {selectedClient ? (
+                <label className="block text-sm text-slate-400 mb-1">Заказчик</label>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerType("client");
+                      setSelectedCompany(null);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs border ${
+                      customerType === "client"
+                        ? "bg-brandBlue-600 border-brandBlue-500 text-white"
+                        : "border-slate-600 text-slate-300"
+                    }`}
+                  >
+                    Клиент
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerType("company");
+                      setSelectedClient(null);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs border ${
+                      customerType === "company"
+                        ? "bg-brandBlue-600 border-brandBlue-500 text-white"
+                        : "border-slate-600 text-slate-300"
+                    }`}
+                  >
+                    Компания
+                  </button>
+                </div>
+                {customerType === "client" && selectedClient ? (
                   <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600">
                     <span className="text-slate-900 dark:text-slate-200">
                       {selectedClient.first_name} {selectedClient.last_name} · {selectedClient.phone}
@@ -318,6 +372,20 @@ export default function OrdersPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedClient(null)}
+                      className="text-xs text-amber-400 hover:text-amber-300"
+                    >
+                      Сменить
+                    </button>
+                  </div>
+                ) : customerType === "company" && selectedCompany ? (
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600">
+                    <span className="text-slate-900 dark:text-slate-200">
+                      {selectedCompany.name}
+                      {selectedCompany.inn ? ` · УНП ${selectedCompany.inn}` : ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCompany(null)}
                       className="text-xs text-amber-400 hover:text-amber-300"
                     >
                       Сменить
@@ -333,12 +401,13 @@ export default function OrdersPage() {
                       autoComplete="off"
                     />
                     <p className="text-xs text-slate-500 mt-1 mb-2">
-                      Найдено: {clientPickData?.total ?? 0}. Выберите строку ниже.
+                      Найдено: {customerType === "client" ? (clientPickData?.total ?? 0) : (companyPickData?.total ?? 0)}. Выберите строку ниже.
                     </p>
                     <div className="rounded-lg border border-slate-700 max-h-48 overflow-y-auto">
-                      {clientPickList.length > 0 ? (
+                      {(customerType === "client" ? clientPickList.length > 0 : companyPickList.length > 0) ? (
                         <ul className="divide-y divide-slate-700">
-                          {clientPickList.map((c) => (
+                          {customerType === "client"
+                            ? clientPickList.map((c) => (
                             <li key={c.id}>
                               <button
                                 type="button"
@@ -354,7 +423,25 @@ export default function OrdersPage() {
                                 <span className="text-slate-400"> · {c.phone}</span>
                               </button>
                             </li>
-                          ))}
+                            ))
+                            : companyPickList.map((c) => (
+                              <li key={c.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCompany(c);
+                                    setClientSearch("");
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700/50 text-slate-900 dark:text-slate-200"
+                                >
+                                  <span className="font-medium">{c.name}</span>
+                                  <span className="text-slate-400">
+                                    {c.inn ? ` · УНП ${c.inn}` : ""}
+                                    {c.phone ? ` · ${c.phone}` : ""}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
                         </ul>
                       ) : (
                         <p className="px-3 py-4 text-sm text-slate-500">
@@ -365,10 +452,21 @@ export default function OrdersPage() {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-2">
-                      Нет клиента?{" "}
-                      <Link href="/dashboard/clients" className="text-brandBlue-300 hover:underline">
-                        Перейти к клиентам
-                      </Link>
+                      {customerType === "client" ? (
+                        <>
+                          Нет клиента?{" "}
+                          <Link href="/dashboard/clients" className="text-brandBlue-300 hover:underline">
+                            Перейти к клиентам
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          Нет компании?{" "}
+                          <Link href="/dashboard/companies" className="text-brandBlue-300 hover:underline">
+                            Перейти к компаниям
+                          </Link>
+                        </>
+                      )}
                     </p>
                   </>
                 )}
@@ -427,7 +525,7 @@ export default function OrdersPage() {
               <button
                 type="button"
                 onClick={() => createOrder.mutate()}
-                disabled={!selectedClient || createOrder.isPending}
+                disabled={(customerType === "client" ? !selectedClient : !selectedCompany) || createOrder.isPending}
                 className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
                 {createOrder.isPending ? "Создание..." : "Создать"}
