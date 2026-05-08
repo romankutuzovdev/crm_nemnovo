@@ -1532,33 +1532,26 @@ export default function Calendar() {
       const token = getToken();
       if (!token) return;
       try {
-        const [clientsRes, assetsRes, roomsRes, rentCatalogRes, guidesRes] = await Promise.all([
+        const [clientsRes, assetsRes, roomsRes, rentCatalogRes, guidesRes, raftingRoutesRes] = await Promise.all([
           apiFetch<Paginated<Client>>("/clients/", { token }),
           apiFetch<Asset[] | Paginated<Asset>>("/assets/", { token }),
           apiFetch<HostelRoom[]>("/hostel/rooms?limit=200", { token }),
           apiFetch<RentCatalogItem[]>("/rent/catalog?limit=200", { token }),
           apiFetch<ExcursionGuideRow[]>("/excursions/guides", { token }),
+          apiFetch<RaftingRouteRow[]>("/rafting/routes?limit=200", { token }),
         ]);
         setClients((clientsRes as Paginated<Client>).items ?? []);
         const assetsList = Array.isArray(assetsRes) ? assetsRes : [];
         setAssets(assetsList);
         setExcursionGuides((guidesRes ?? []).slice().sort((a, b) => a.full_name.localeCompare(b.full_name, "ru")));
-        const raftingItems: ServiceCatalogOption[] = assetsList
-          .filter((asset) => {
-            const haystack = `${asset.name} ${asset.code} ${asset.category?.name ?? ""}`.toLowerCase();
-            return (
-              haystack.includes("kayak") ||
-              haystack.includes("байдар") ||
-              haystack.includes("рафт") ||
-              haystack.includes("сплав")
-            );
-          })
-          .map((asset) => ({
-            id: `rafting:${asset.id}`,
+        const raftingItems: ServiceCatalogOption[] = (raftingRoutesRes ?? [])
+          .filter((route) => route.is_active)
+          .map((route) => ({
+            id: `rafting-route:${route.id}`,
             service_type: "rafting",
-            label: `${asset.name} (${asset.code})`,
-            description: asset.name,
-            unit_price: 0,
+            label: route.name,
+            description: route.name,
+            unit_price: Number(route.default_price_per_person ?? 0),
           }));
         const hostelItems: ServiceCatalogOption[] = roomsRes.map((room) => ({
           id: `hostel:${room.id}`,

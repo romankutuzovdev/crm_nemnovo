@@ -171,20 +171,18 @@ export default function HostelPage() {
   });
 
   const createRoom = useMutation({
-    mutationFn: () =>
+    mutationFn: (payload: {
+      code: string;
+      title: string | null;
+      capacity: number;
+      floor: number | null;
+      base_price_per_night: number | null;
+      description: string | null;
+    }) =>
       apiFetch<RoomRow>("/hostel/rooms", {
         method: "POST",
         token,
-        body: JSON.stringify({
-          code: roomForm.code.trim(),
-          title: roomForm.title.trim() || null,
-          capacity: roomForm.capacity ? Number(roomForm.capacity) : 2,
-          floor: roomForm.floor ? Number(roomForm.floor) : null,
-          base_price_per_night: roomForm.base_price_per_night
-            ? Number(roomForm.base_price_per_night)
-            : null,
-          description: roomForm.description.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
       setRoomForm({
@@ -211,6 +209,44 @@ export default function HostelPage() {
       await queryClient.invalidateQueries({ queryKey: ["hostel", "rooms"] });
     },
   });
+
+  const handleCreateRoom = () => {
+    const code = roomForm.code.trim();
+    if (!code) {
+      alert("Укажите код номера.");
+      return;
+    }
+
+    const capacityRaw = roomForm.capacity.trim();
+    const capacity = capacityRaw ? Number(capacityRaw) : 2;
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 50) {
+      alert("Поле «Мест» должно быть целым числом от 1 до 50.");
+      return;
+    }
+
+    const floorRaw = roomForm.floor.trim();
+    const floor = floorRaw === "" ? null : Number(floorRaw);
+    if (floor !== null && !Number.isInteger(floor)) {
+      alert("Поле «Этаж» должно быть целым числом.");
+      return;
+    }
+
+    const priceRaw = roomForm.base_price_per_night.trim().replace(",", ".");
+    const basePrice = priceRaw === "" ? null : Number(priceRaw);
+    if (basePrice !== null && (!Number.isFinite(basePrice) || basePrice < 0)) {
+      alert("Поле «BYN с человека / ночь» должно быть числом не меньше 0.");
+      return;
+    }
+
+    createRoom.mutate({
+      code,
+      title: roomForm.title.trim() || null,
+      capacity,
+      floor,
+      base_price_per_night: basePrice,
+      description: roomForm.description.trim() || null,
+    });
+  };
 
   const createBooking = useMutation({
     mutationFn: (pricePerPersonPerNight: number) => {
@@ -443,7 +479,7 @@ export default function HostelPage() {
             />
             <div>
               <button
-                onClick={() => createRoom.mutate()}
+                onClick={handleCreateRoom}
                 disabled={createRoom.isPending || !roomForm.code.trim()}
                 className="px-4 py-2 rounded-lg bg-brandBlue-600 hover:bg-brandBlue-700 disabled:opacity-50 text-white"
               >
